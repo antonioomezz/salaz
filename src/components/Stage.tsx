@@ -4,7 +4,14 @@ import { useEffect, useRef } from 'react';
 import type { User } from '@/lib/types';
 import { Expand, Screen, Speaker, SpeakerMuted } from './icons';
 
-export type Share = { user: User; stream: MediaStream; isLocal: boolean };
+export type Share = {
+  user: User;
+  stream: MediaStream;
+  isLocal: boolean;
+  /** 0-200: volume individual configurado para esta pessoa */
+  userVolume: number;
+  userMuted: boolean;
+};
 
 type Props = {
   shares: Share[];
@@ -28,7 +35,7 @@ export function Stage({ shares, volume, deafened, outputDeviceId }: Props) {
             key={share.user.id}
             share={share}
             solo={shares.length === 1}
-            volume={volume}
+            volume={(volume / 100) * share.userVolume}
             deafened={deafened}
             outputDeviceId={outputDeviceId}
           />
@@ -67,9 +74,11 @@ function Tile({
   useEffect(() => {
     const el = video.current;
     if (!el) return;
-    el.muted = share.isLocal || deafened;
+    // o som da própria transmissão fica sempre mudo para não realimentar
+    el.muted = share.isLocal || deafened || share.userMuted;
+    // o elemento aceita no máximo 1.0; acima disso seria preciso WebAudio
     el.volume = Math.max(0, Math.min(1, volume / 100));
-  }, [share.isLocal, deafened, volume]);
+  }, [share.isLocal, share.userMuted, deafened, volume]);
 
   useEffect(() => {
     const el = video.current as (HTMLVideoElement & { setSinkId?: (id: string) => Promise<void> }) | null;

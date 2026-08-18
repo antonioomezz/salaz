@@ -4,6 +4,13 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { iceServers } from '@/lib/rtc';
 import { getSocket } from '@/lib/socket';
 import { micConstraints, type AudioSettings } from '@/lib/audioSettings';
+import { createMixer, type Mixer } from '@/lib/mixer';
+import {
+  applyContentHint,
+  displayConstraints,
+  preferScreenCodecs,
+  tuneScreenSender,
+} from '@/lib/screenQuality';
 
 type Peer = {
   pc: RTCPeerConnection;
@@ -70,11 +77,10 @@ export function useVoice({ myId, peerIds, settings }: Params) {
       { analyser: AnalyserNode; data: Uint8Array<ArrayBuffer>; src: MediaStreamAudioSourceNode }
     >()
   );
-  const gainChain = useRef<{
-    src: MediaStreamAudioSourceNode;
-    gain: GainNode;
-    dest: MediaStreamAudioDestinationNode;
-  } | null>(null);
+  const mixer = useRef<Mixer | null>(null);
+  /** há um arquivo de música tocando na chamada agora */
+  const [playingFile, setPlayingFile] = useState<string | null>(null);
+  const precisaMixer = useRef(false);
 
   const ctx = useCallback(() => {
     audioCtx.current ||= new AudioContext();
@@ -133,28 +139,34 @@ export function useVoice({ myId, peerIds, settings }: Params) {
   }, [myId]);
 
   // ------------------------------------------------------- pipeline do mic
-  /** Monta a track que sai daqui. Em volume 100 devolve a crua, sem processar. */
+  /**
+   * Monta a track que sai daqui. Sem ganho alterado e sem música tocando,
+   * devolve a track CRUA — nenhum WebAudio no caminho crítico do microfone.
+   */
   const buildOutgoing = useCallback(
     (raw: MediaStreamTrack, volume: number): MediaStreamTrack => {
-      gainChain.current?.src.disconnect();
-      gainChain.current = null;
-      if (volume === 100) return raw;
+      mixer.current?.destroy();
+      mixer.current = null;
 
-      try {
-        const audio = ctx();
-        const src = audio.createMediaStreamSource(new MediaStream([raw]));
-        const gain = audio.createGain();
-        gain.gain.value = volume / 100;
-        const dest = audio.createMediaStreamDestination();
-        src.connect(gain).connect(dest);
-        gainChain.current = { src, gain, dest };
-        return dest.stream.getAudioTracks()[0] ?? raw;
-      } catch {
-        return raw;
-      }
+      if (volume === 100 && !precisaMixer.current) return raw;
+
+      const m = createMixer(ctx(), raw, {
+        micVolume: volume,
+        musicVolume: cfg.current.musicVolume,
+      });
+      if (!m) return raw;
+      mixer.current = m;
+      return m.track;
     },
     [ctx]
   );
+
+  /** Aplica codec, bitrate e preferência de degradação no envio de tela. */
+  const afinarEnvioDeTela = useCallback((pc: RTCPeerConnection, sender: RTCRtpSender) => {
+    const transceiver = pc.getTransceivers().find((t) => t.sender === sender);
+    if (transceiver) preferScreenCodecs(transceiver);
+    void tuneScreenSender(sender, cfg.current.screenPreset);
+  }, []);
 
   const pushMicToPeers = useCallback((track: MediaStreamTrack) => {
     for (const peer of peers.current.values()) {
@@ -327,12 +339,15 @@ export function useVoice({ myId, peerIds, settings }: Params) {
       const screen = screenStream.current;
       if (screen) {
         const video = screen.getVideoTracks()[0];
-        if (video) peer.screenVideoSender = pc.addTrack(video, screen);
+        if (video) {
+          peer.screenVideoSender = pc.addTrack(video, screen);
+          afinarEnvioDeTela(pc, peer.screenVideoSender);
+        }
         const audio = screen.getAudioTracks()[0];
         if (audio) peer.screenAudioSender = pc.addTrack(audio, screen);
       }
     },
-    [myId, watchLevel]
+    [myId, watchLevel, afinarEnvioDeTela]
   );
 
   // reconcilia a malha sempre que a lista do canal de voz muda
@@ -441,8 +456,10 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     stopScreen();
     for (const id of [...peers.current.keys()]) dropPeer(id);
     micStream.current?.getTracks().forEach((t) => t.stop());
-    gainChain.current?.src.disconnect();
-    gainChain.current = null;
+    mixer.current?.destroy();
+    mixer.current = null;
+    precisaMixer.current = false;
+    setPlayingFile(null);
     micStream.current = null;
     rawMic.current = null;
     outgoingMic.current = null;
@@ -481,21 +498,15 @@ export function useVoice({ myId, peerIds, settings }: Params) {
   const startScreen = useCallback(async () => {
     const socket = getSocket();
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: 30 },
-        // som da aba/tela; nem todo navegador entrega, então tratamos como opcional
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: false,
-        },
-      });
+      const preset = cfg.current.screenPreset;
+      const stream = await navigator.mediaDevices.getDisplayMedia(displayConstraints(preset));
       screenStream.current = stream;
       setLocalScreen(stream);
 
       const video = stream.getVideoTracks()[0];
       const audio = stream.getAudioTracks()[0];
       setScreenHasAudio(!!audio);
+      if (video) applyContentHint(video, preset);
 
       // botão nativo "parar compartilhamento" do navegador
       video?.addEventListener('ended', () => stopScreen());
@@ -504,6 +515,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
         if (video) {
           if (peer.screenVideoSender) void peer.screenVideoSender.replaceTrack(video).catch(() => {});
           else peer.screenVideoSender = peer.pc.addTrack(video, stream);
+          afinarEnvioDeTela(peer.pc, peer.screenVideoSender);
         }
         if (audio) {
           if (peer.screenAudioSender) void peer.screenAudioSender.replaceTrack(audio).catch(() => {});
@@ -520,7 +532,51 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     } catch {
       /* usuário fechou o seletor de tela */
     }
-  }, [stopScreen]);
+  }, [stopScreen, afinarEnvioDeTela]);
+
+  /**
+   * Toca um arquivo de áudio DENTRO da chamada: ele entra no mixer e sai junto
+   * com a sua voz, então todo mundo ouve. É o que o player do YouTube não pode
+   * fazer, porque o áudio do iframe é de outra origem e não pode ser capturado.
+   */
+  const playFileInCall = useCallback(
+    async (file: File) => {
+      if (!rawMic.current) {
+        setError('Entre em um canal de voz antes de tocar um arquivo.');
+        return;
+      }
+      try {
+        precisaMixer.current = true;
+        // remonta a saída já com o mixer no caminho
+        const track = buildOutgoing(rawMic.current, cfg.current.inputVolume);
+        track.enabled = rawMic.current.enabled;
+        outgoingMic.current = track;
+        pushMicToPeers(track);
+
+        const url = URL.createObjectURL(file);
+        const el = mixer.current?.playFile(url);
+        el?.addEventListener('ended', () => setPlayingFile(null));
+        setPlayingFile(file.name);
+      } catch {
+        setError('Não consegui tocar esse arquivo.');
+      }
+    },
+    [buildOutgoing, pushMicToPeers]
+  );
+
+  const stopFileInCall = useCallback(() => {
+    mixer.current?.stopFile();
+    setPlayingFile(null);
+    precisaMixer.current = false;
+
+    // volta para a track crua se nada mais exigir o mixer
+    if (rawMic.current && cfg.current.inputVolume === 100) {
+      const track = buildOutgoing(rawMic.current, 100);
+      track.enabled = rawMic.current.enabled;
+      outgoingMic.current = track;
+      pushMicToPeers(track);
+    }
+  }, [buildOutgoing, pushMicToPeers]);
 
   /** Aplica mudanças de configuração sem derrubar a chamada. */
   const applySettings = useCallback(
@@ -542,10 +598,12 @@ export function useVoice({ myId, peerIds, settings }: Params) {
           if (rawMic.current) rawMic.current.enabled = wasEnabled;
           pushMicToPeers(track);
           setMicLive(true);
+        } else if (next.musicVolume !== previous.musicVolume && mixer.current) {
+          mixer.current.setMusicGain(next.musicVolume);
         } else if (next.inputVolume !== previous.inputVolume && rawMic.current) {
-          if (gainChain.current && next.inputVolume !== 100) {
-            // já existe cadeia de ganho: só ajusta o valor
-            gainChain.current.gain.gain.value = next.inputVolume / 100;
+          if (mixer.current && next.inputVolume !== 100) {
+            // mixer já montado: só move o fader do microfone
+            mixer.current.setMicGain(next.inputVolume);
           } else {
             const wasEnabled = rawMic.current.enabled;
             const track = buildOutgoing(rawMic.current, next.inputVolume);
@@ -581,6 +639,9 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     micOn,
     micLive,
     deafened,
+    playingFile,
+    playFileInCall,
+    stopFileInCall,
     connecting,
     error,
     localScreen,

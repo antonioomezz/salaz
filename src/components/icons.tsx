@@ -91,3 +91,9 @@ export const SpeakerMuted = ({ className = base }: P) => (
     <path d="M16.3 9.3a1 1 0 011.4 0l1.3 1.3 1.3-1.3a1 1 0 111.4 1.4L20.4 12l1.3 1.3a1 1 0 01-1.4 1.4L19 13.4l-1.3 1.3a1 1 0 01-1.4-1.4l1.3-1.3-1.3-1.3a1 1 0 010-1.4z" />
   </svg>
 );
+
+export const Clip = ({ className = base }: P) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <path d="M16.5 6.5v9a4.5 4.5 0 11-9 0V6a3 3 0 116 0v9a1.5 1.5 0 11-3 0V7H9v8a3 3 0 106 0V6a4.5 4.5 0 10-9 0v9.5a6 6 0 1012 0v-9h-1.5z" />
+  </svg>
+);

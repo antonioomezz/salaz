@@ -16,6 +16,13 @@ export type AudioSettings = {
   sfxEnabled: boolean;
   /** 0-100 */
   sfxVolume: number;
+  /**
+   * 'detail' privilegia nitidez (texto, código); 'motion' privilegia fluidez
+   * (vídeo, jogo). Vira contentHint + bitrate + framerate na transmissão.
+   */
+  screenPreset: 'detail' | 'motion';
+  /** 0-100: volume do arquivo de música tocado direto na chamada */
+  musicVolume: number;
 };
 
 export const DEFAULT_SETTINGS: AudioSettings = {
@@ -28,6 +35,8 @@ export const DEFAULT_SETTINGS: AudioSettings = {
   autoGainControl: true,
   sfxEnabled: true,
   sfxVolume: 60,
+  screenPreset: 'detail',
+  musicVolume: 70,
 };
 
 const KEY = 'salaz:audio';

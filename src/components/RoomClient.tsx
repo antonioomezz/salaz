@@ -11,11 +11,23 @@ import {
   type AudioSettings,
 } from '@/lib/audioSettings';
 import { configureSfx, playSfx } from '@/lib/sounds';
-import type { Channel, JoinAck, Message, User } from '@/lib/types';
+import type { CompressedImage } from '@/lib/imageCompress';
+import {
+  getUserAudio,
+  saveUserAudio,
+  setUserAudio,
+  useStoredUserAudio,
+  type UserAudio,
+  type UserAudioMap,
+} from '@/lib/userVolumes';
+import { EMPTY_PLAYER, type Channel, type JoinAck, type Message, type PlayerState, type User } from '@/lib/types';
+import { isMusicCommand } from '@/lib/musicCommands';
 import { Chat } from './Chat';
 import { MemberList } from './MemberList';
 import { SettingsModal } from './SettingsModal';
 import { Sidebar } from './Sidebar';
+import { MusicPlayer } from './MusicPlayer';
+import { RemoteAudio } from './RemoteAudio';
 import { Stage, type Share } from './Stage';
 import { Hash, Speaker } from './icons';
 
@@ -74,6 +86,10 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
   const [active, setActive] = useState('geral');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [player, setPlayer] = useState<PlayerState>(EMPTY_PLAYER);
+  /** relógio nosso menos o do servidor, para alinhar a posição da música */
+  const [clockOffset, setClockOffset] = useState(0);
+  const [musicVolume, setMusicVolume] = useState(60);
 
   // -------------------------------------------------------- configurações
   const stored = useStoredSettings();
@@ -84,6 +100,17 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
   useEffect(() => {
     configureSfx({ enabled: settings.sfxEnabled, volume: settings.sfxVolume / 100 });
   }, [settings.sfxEnabled, settings.sfxVolume]);
+
+  // ------------------------------------------------ volume por pessoa
+  const storedUserAudio = useStoredUserAudio();
+  const [editedUserAudio, setEditedUserAudio] = useState<UserAudioMap | null>(null);
+  const userAudio = editedUserAudio ?? storedUserAudio ?? {};
+
+  const alterarVolumeDe = (userName: string, patch: Partial<UserAudio>) => {
+    const next = setUserAudio(userAudio, userName, patch);
+    setEditedUserAudio(next);
+    saveUserAudio(next);
+  };
 
   // meu canal de voz vem do servidor: evita divergência entre os clientes
   const myVoiceChannel = users.find((u) => u.id === myId)?.voiceChannel ?? null;
@@ -124,6 +151,10 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
         setUsers(ack.users);
         setChannels(ack.channels);
         setMessages(ack.messages ?? {});
+        if (ack.player) {
+          setClockOffset(Date.now() - ack.player.serverNow);
+          setPlayer(ack.player);
+        }
         setActive((cur) =>
           ack.channels.some((c) => c.id === cur && c.type === 'text')
             ? cur
@@ -145,6 +176,10 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
       }
     };
 
+    const onPlayer = (st: PlayerState) => {
+      setClockOffset(Date.now() - st.serverNow);
+      setPlayer(st);
+    };
     const onUsers = (list: User[]) => setUsers(list);
     const onChannels = (list: Channel[]) => setChannels(list);
     const onMessage = (msg: Message) => {
@@ -157,6 +192,7 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
     s.on('users', onUsers);
     s.on('channels', onChannels);
     s.on('message', onMessage);
+    s.on('player:state', onPlayer);
     // se o socket já estava aberto, o evento 'connect' não vai disparar de novo
     if (s.connected) queueMicrotask(join);
 
@@ -166,6 +202,7 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
       s.off('users', onUsers);
       s.off('channels', onChannels);
       s.off('message', onMessage);
+      s.off('player:state', onPlayer);
     };
   }, [roomId, name]);
 
@@ -192,12 +229,26 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
     .filter((u) => u.sharing && u.voiceChannel === myVoiceChannel && myVoiceChannel !== null)
     .map((u) => {
       const stream = u.id === myId ? voice.localScreen : voice.remoteStreams[u.id]?.screen;
-      return stream ? { user: u, stream, isLocal: u.id === myId } : null;
+      if (!stream) return null;
+      const audio = getUserAudio(userAudio, u.name);
+      return {
+        user: u,
+        stream,
+        isLocal: u.id === myId,
+        userVolume: audio.volume,
+        userMuted: audio.muted,
+      };
     })
     .filter((s): s is Share => s !== null);
 
-  const send = (text: string) => {
-    getSocket().emit('message', { channelId: active, text });
+  const send = (text: string, image?: CompressedImage) => {
+    // ";play ..." e amigos vão para o bot, não viram mensagem normal
+    if (!image && isMusicCommand(text)) {
+      getSocket().emit('music:command', { channelId: active, text });
+      playSfx('send');
+      return;
+    }
+    getSocket().emit('message', { channelId: active, text, image });
     playSfx('send');
   };
   const createChannel = (channelName: string, type: 'text' | 'voice') =>
@@ -283,6 +334,14 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
           </div>
         )}
 
+        <MusicPlayer
+          state={player}
+          clockOffset={clockOffset}
+          volume={musicVolume}
+          onVolumeChange={setMusicVolume}
+          onEnded={(videoId) => getSocket().emit('music:ended', { videoId, channelId: active })}
+        />
+
         <Stage
           shares={shares}
           volume={settings.outputVolume}
@@ -293,20 +352,29 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
         <Chat channel={activeChannel} messages={messages[active] ?? []} onSend={send} />
       </main>
 
-      <MemberList users={users} me={me} speaking={voice.speaking} />
+      <MemberList
+        users={users}
+        me={me}
+        speaking={voice.speaking}
+        userAudio={userAudio}
+        onUserAudioChange={alterarVolumeDe}
+      />
 
       {/* áudio (microfone) dos outros participantes */}
-      {Object.entries(voice.remoteStreams).map(([id, streams]) =>
-        streams.mic ? (
+      {Object.entries(voice.remoteStreams).map(([id, streams]) => {
+        if (!streams.mic) return null;
+        const pessoa = users.find((u) => u.id === id);
+        const audio = pessoa ? getUserAudio(userAudio, pessoa.name) : null;
+        return (
           <RemoteAudio
             key={id}
             stream={streams.mic}
-            muted={voice.deafened}
-            volume={settings.outputVolume}
+            muted={voice.deafened || !!audio?.muted}
+            volume={(settings.outputVolume / 100) * (audio?.volume ?? 100)}
             outputDeviceId={settings.outputDeviceId}
           />
-        ) : null
-      )}
+        );
+      })}
 
       {settingsReady && settingsOpen && (
         <SettingsModal
@@ -315,43 +383,11 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
           onClose={() => setSettingsOpen(false)}
           inputLevel={voice.inputLevel}
           inVoice={voice.inVoice}
+          playingFile={voice.playingFile}
+          onPlayFile={(f) => void voice.playFileInCall(f)}
+          onStopFile={voice.stopFileInCall}
         />
       )}
     </div>
   );
-}
-
-function RemoteAudio({
-  stream,
-  muted,
-  volume,
-  outputDeviceId,
-}: {
-  stream: MediaStream;
-  muted: boolean;
-  volume: number;
-  outputDeviceId: string;
-}) {
-  const ref = useRef<HTMLAudioElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (el && el.srcObject !== stream) {
-      el.srcObject = stream;
-      el.play().catch(() => {});
-    }
-  }, [stream]);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (el) el.volume = Math.max(0, Math.min(1, volume / 100));
-  }, [volume]);
-
-  useEffect(() => {
-    const el = ref.current as (HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }) | null;
-    if (!el?.setSinkId) return;
-    void el.setSinkId(outputDeviceId).catch(() => {});
-  }, [outputDeviceId]);
-
-  return <audio ref={ref} autoPlay playsInline muted={muted} className="hidden" />;
 }

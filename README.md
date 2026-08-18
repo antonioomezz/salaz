@@ -42,6 +42,53 @@ npm start
 
 O botão **+** ao lado de "Canais de texto" e "Canais de voz" cria canais novos na hora.
 
+### Imagens no chat
+
+Cole com **Ctrl+V**, arraste para a janela ou use o clipe. A imagem é reduzida e
+recomprimida no navegador antes de subir. Clique nela para ver em tamanho cheio.
+
+As imagens vivem **só na memória do servidor** — nada em disco, nada no navegador. Quando o
+serviço reinicia ou hiberna, elas somem por completo junto com as mensagens. Cada sala guarda
+no máximo 25 imagens; passando disso, as mais antigas são liberadas.
+
+### Volume de cada pessoa
+
+Clique numa pessoa na lista da direita para abrir o controle dela: slider de **0 a 200%** e
+botão de silenciar só aquela pessoa. Fica salvo por nome, então vale nas próximas vezes.
+
+Até 100% o ajuste é direto no elemento de áudio. Acima disso entra amplificação por WebAudio
+— pode distorcer, e nesse modo a escolha de dispositivo de saída não se aplica.
+
+### Bot de música
+
+Comandos no chat de texto:
+
+| Comando | O que faz |
+| --- | --- |
+| `;play <link do YouTube>` | toca na hora, ou põe na fila |
+| `;pause` `;resume` `;skip` `;stop` | controla quem está tocando |
+| `;queue` | mostra a fila |
+| `;;play <link do Spotify>` | mostra a música (não toca — veja abaixo) |
+| `;help` | lista os comandos |
+
+O servidor guarda a posição da música e sincroniza todo mundo: o player de cada um se corrige
+sozinho quando a defasagem passa de 1,5s. Quem entra depois já cai no ponto certo.
+
+**A música toca no navegador de cada um, não pela chamada de voz.** É o que permite usar o
+player oficial do YouTube sem baixar áudio no servidor — o caminho que derrubou os bots de
+música do Discord em 2021. Efeito prático é o mesmo: todos ouvem juntos, e cada um regula seu
+próprio volume.
+
+**Spotify não pode ser transmitido.** Não existe forma legítima de mandar áudio do Spotify
+para fora do app deles. O `;;play` mostra a capa e o nome da faixa e sugere mandar o link do
+YouTube.
+
+### Tocar um arquivo de áudio na chamada
+
+Nas configurações, em "Tocar áudio na chamada", escolha um mp3. Ele entra no **mixer** junto
+com a sua voz, então todos ouvem pela chamada. É o que o player do YouTube não pode fazer:
+o áudio de um iframe é de outra origem e o navegador não deixa capturar.
+
 ### Configurações de voz (ícone de engrenagem)
 
 - Escolher **microfone** e **saída de áudio** específicos, em vez do padrão do sistema
@@ -49,6 +96,8 @@ O botão **+** ao lado de "Canais de texto" e "Canais de voz" cria canais novos 
 - Barra de **teste do microfone** ao vivo
 - Ligar/desligar **cancelamento de eco**, **redução de ruído** e **ganho automático**
 - Ligar/desligar os **efeitos sonoros** e ajustar o volume deles
+- Preset de **qualidade da transmissão**: "texto e código" (nítido) ou "vídeo e jogo" (fluido)
+- Tocar um **arquivo de áudio** dentro da chamada, com fader próprio
 
 Mudanças valem na hora, sem derrubar a chamada. Tudo fica salvo no navegador.
 
@@ -112,4 +161,10 @@ src/lib/rtc.ts             STUN/TURN — único lugar a mexer para adicionar TUR
 - **Vigia do microfone:** no Windows, abrir a captura de tela pode reiniciar o subsistema de áudio e matar a track do microfone. Um watchdog detecta isso (track `ended` ou `muted`), recaptura o microfone e troca a track nas conexões com `replaceTrack` — sem renegociar e sem derrubar a chamada.
 - **Microfone e som da tela são streams separadas.** Chegam pela mesma conexão mas são classificadas por stream: a que tem vídeo é a tela (e o `<video>` toca o som dela), a que só tem áudio é o microfone. Sem essa separação, o som da tela sobrescreveria o microfone de quem transmite.
 - **Efeitos sonoros são sintetizados em WebAudio**, sem nenhum arquivo de áudio no repositório.
+- **Qualidade da tela é configurada explicitamente.** Sem `contentHint`, `maxBitrate` e
+  `degradationPreference`, o navegador degradava a transmissão para 320x180 por conta própria.
+  Com eles, e preferindo AV1/VP9, a tela chega em 1920x1080.
+- **O mixer só entra quando precisa.** Com o volume de entrada em 100% e nenhum arquivo
+  tocando, o que vai para a rede é a track crua do microfone, sem WebAudio no caminho — é o
+  ponto mais sensível do app e fica protegido por padrão.
 - **Salas em memória:** reiniciar o servidor apaga tudo. Salas vazias são descartadas depois de 2h.

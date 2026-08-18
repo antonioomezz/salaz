@@ -12,9 +12,22 @@ type Props = {
   /** 0-100, medido do microfone ao vivo */
   inputLevel: number;
   inVoice: boolean;
+  /** nome do arquivo tocando na chamada, ou null */
+  playingFile: string | null;
+  onPlayFile: (file: File) => void;
+  onStopFile: () => void;
 };
 
-export function SettingsModal({ settings, onChange, onClose, inputLevel, inVoice }: Props) {
+export function SettingsModal({
+  settings,
+  onChange,
+  onClose,
+  inputLevel,
+  inVoice,
+  playingFile,
+  onPlayFile,
+  onStopFile,
+}: Props) {
   const [inputs, setInputs] = useState<MediaDeviceInfo[]>([]);
   const [outputs, setOutputs] = useState<MediaDeviceInfo[]>([]);
   const [semPermissao, setSemPermissao] = useState(false);
@@ -172,6 +185,81 @@ export function SettingsModal({ settings, onChange, onClose, inputLevel, inVoice
             <p className="mt-2 text-[11px] text-mute">
               Mudar qualquer um destes recaptura o microfone na hora, sem derrubar a chamada.
             </p>
+          </Section>
+
+          {/* ------------------------------------------------ tela */}
+          <Section icon={<Screen className="h-4 w-4" />} title="Qualidade da transmissão">
+            <div className="flex gap-2">
+              {(
+                [
+                  ['detail', 'Texto e código', 'Prioriza nitidez; menos quadros por segundo'],
+                  ['motion', 'Vídeo e jogo', 'Prioriza fluidez; 60 fps e mais banda'],
+                ] as const
+              ).map(([valor, titulo, desc]) => (
+                <button
+                  key={valor}
+                  onClick={() => set('screenPreset', valor)}
+                  className={`flex-1 rounded p-2 text-left transition ${
+                    settings.screenPreset === valor
+                      ? 'bg-blurple text-white'
+                      : 'bg-ink-400 text-bright hover:bg-ink-300'
+                  }`}
+                >
+                  <span className="block text-xs font-semibold">{titulo}</span>
+                  <span className="block text-[10px] leading-tight opacity-80">{desc}</span>
+                </button>
+              ))}
+            </div>
+            <p className="mt-2 text-[11px] text-mute">
+              Vale na próxima vez que você começar a transmitir.
+            </p>
+          </Section>
+
+          {/* ------------------------------------------------ mixer */}
+          <Section title="Tocar áudio na chamada">
+            <p className="mb-2 text-[11px] leading-tight text-mute">
+              Um arquivo de áudio entra junto com a sua voz, então todos ouvem. O player do
+              YouTube não passa por aqui: ele toca no navegador de cada um.
+            </p>
+
+            {playingFile ? (
+              <div className="flex items-center gap-2 rounded bg-ink-400 p-2">
+                <span className="min-w-0 flex-1 truncate text-xs text-bright">🎵 {playingFile}</span>
+                <button
+                  onClick={onStopFile}
+                  className="rounded bg-danger px-2 py-1 text-[11px] font-medium text-white transition hover:bg-danger-dark"
+                >
+                  parar
+                </button>
+              </div>
+            ) : (
+              <label
+                className={`block cursor-pointer rounded border border-dashed border-ink-200 p-3 text-center text-xs transition hover:border-blurple ${
+                  inVoice ? 'text-mute' : 'pointer-events-none opacity-40'
+                }`}
+              >
+                {inVoice ? 'Escolher um arquivo de áudio' : 'Entre em um canal de voz primeiro'}
+                <input
+                  type="file"
+                  accept="audio/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) onPlayFile(f);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+            )}
+
+            <div className="mt-3">
+              <Slider
+                label="Volume da música na chamada"
+                value={settings.musicVolume}
+                max={100}
+                onChange={(v) => set('musicVolume', v)}
+              />
+            </div>
           </Section>
 
           {/* ------------------------------------------------ efeitos sonoros */}
