@@ -5,6 +5,7 @@ import type { Channel, User } from '@/lib/types';
 import { Avatar } from './Avatar';
 import {
   Copy,
+  Gear,
   Hash,
   Headphones,
   HeadphonesOff,
@@ -20,6 +21,7 @@ type Voice = {
   inVoice: boolean;
   voiceChannel: string | null;
   micOn: boolean;
+  micLive: boolean;
   deafened: boolean;
   connecting: boolean;
   joinVoice: (channelId: string) => void;
@@ -40,6 +42,7 @@ type Props = {
   activeChannel: string;
   onSelectChannel: (id: string) => void;
   onCreateChannel: (name: string, type: 'text' | 'voice') => void;
+  onOpenSettings: () => void;
   voice: Voice;
 };
 
@@ -52,6 +55,7 @@ export function Sidebar({
   activeChannel,
   onSelectChannel,
   onCreateChannel,
+  onOpenSettings,
   voice,
 }: Props) {
   const [copied, setCopied] = useState(false);
@@ -192,8 +196,16 @@ export function Sidebar({
         {me && <Avatar user={me} size={32} speaking={!!speaking[me.id]} />}
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13px] font-semibold text-white">{me?.name ?? '...'}</div>
-          <div className="text-[11px] text-mute">
-            {voice.connecting ? 'conectando...' : voice.inVoice ? 'em chamada' : 'online'}
+          <div
+            className={`text-[11px] ${voice.inVoice && !voice.micLive ? 'text-danger' : 'text-mute'}`}
+          >
+            {voice.connecting
+              ? 'conectando...'
+              : voice.inVoice
+                ? voice.micLive
+                  ? 'em chamada'
+                  : 'microfone mudo'
+                : 'online'}
           </div>
         </div>
         <button
@@ -215,6 +227,13 @@ export function Sidebar({
           }`}
         >
           {voice.deafened ? <HeadphonesOff /> : <Headphones />}
+        </button>
+        <button
+          onClick={onOpenSettings}
+          title="Configurações de voz"
+          className="rounded p-1.5 text-soft transition hover:bg-ink-400 hover:text-white"
+        >
+          <Gear />
         </button>
       </div>
     </aside>

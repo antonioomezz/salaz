@@ -4,9 +4,17 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { getSocket } from '@/lib/socket';
 import { useVoice } from '@/hooks/useVoice';
 import { saveName, useStoredName } from '@/lib/useStoredName';
+import {
+  DEFAULT_SETTINGS,
+  saveSettings,
+  useStoredSettings,
+  type AudioSettings,
+} from '@/lib/audioSettings';
+import { configureSfx, playSfx } from '@/lib/sounds';
 import type { Channel, JoinAck, Message, User } from '@/lib/types';
 import { Chat } from './Chat';
 import { MemberList } from './MemberList';
+import { SettingsModal } from './SettingsModal';
 import { Sidebar } from './Sidebar';
 import { Stage, type Share } from './Stage';
 import { Hash, Speaker } from './icons';
@@ -65,6 +73,17 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
   const [active, setActive] = useState('geral');
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // -------------------------------------------------------- configurações
+  const stored = useStoredSettings();
+  const [edited, setEdited] = useState<AudioSettings | null>(null);
+  const settings = edited ?? stored ?? DEFAULT_SETTINGS;
+  const settingsReady = stored !== null;
+
+  useEffect(() => {
+    configureSfx({ enabled: settings.sfxEnabled, volume: settings.sfxVolume / 100 });
+  }, [settings.sfxEnabled, settings.sfxVolume]);
 
   // meu canal de voz vem do servidor: evita divergência entre os clientes
   const myVoiceChannel = users.find((u) => u.id === myId)?.voiceChannel ?? null;
@@ -76,13 +95,20 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
     .join(',');
   const peerIds = useMemo(() => (peerKey ? peerKey.split(',') : []), [peerKey]);
 
-  const voice = useVoice({ myId, peerIds });
+  const voice = useVoice({ myId, peerIds, settings });
 
   // os handlers do socket precisam da versão mais recente da API de voz
   const voiceRef = useRef(voice);
   useEffect(() => {
     voiceRef.current = voice;
   });
+
+  const aplicarSettings = (next: AudioSettings) => {
+    const previous = settings;
+    setEdited(next);
+    saveSettings(next);
+    void voiceRef.current.applySettings(next, previous);
+  };
 
   // ------------------------------------------------------------ socket
   useEffect(() => {
@@ -121,8 +147,10 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
 
     const onUsers = (list: User[]) => setUsers(list);
     const onChannels = (list: Channel[]) => setChannels(list);
-    const onMessage = (msg: Message) =>
+    const onMessage = (msg: Message) => {
       setMessages((prev) => ({ ...prev, [msg.channelId]: [...(prev[msg.channelId] ?? []), msg] }));
+      if (msg.userId !== s.id) playSfx('message');
+    };
 
     s.on('connect', join);
     s.on('disconnect', onDisconnect);
@@ -141,6 +169,21 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
     };
   }, [roomId, name]);
 
+  // ------------------------------------------- sons de entrada/saída na voz
+  const antesNaVoz = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const agora = new Set(
+      users.filter((u) => u.voiceChannel && u.voiceChannel === myVoiceChannel && u.id !== myId).map((u) => u.id)
+    );
+    const anterior = antesNaVoz.current;
+
+    if (myVoiceChannel) {
+      for (const id of agora) if (!anterior.has(id)) playSfx('someoneJoined');
+      for (const id of anterior) if (!agora.has(id)) playSfx('someoneLeft');
+    }
+    antesNaVoz.current = agora;
+  }, [users, myVoiceChannel, myId]);
+
   // ------------------------------------------------------------ derivados
   const me = users.find((u) => u.id === myId) ?? null;
   const activeChannel = channels.find((c) => c.id === active);
@@ -148,12 +191,15 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
   const shares: Share[] = users
     .filter((u) => u.sharing && u.voiceChannel === myVoiceChannel && myVoiceChannel !== null)
     .map((u) => {
-      const stream = u.id === myId ? voice.localScreen : voice.remoteVideo[u.id];
+      const stream = u.id === myId ? voice.localScreen : voice.remoteStreams[u.id]?.screen;
       return stream ? { user: u, stream, isLocal: u.id === myId } : null;
     })
     .filter((s): s is Share => s !== null);
 
-  const send = (text: string) => getSocket().emit('message', { channelId: active, text });
+  const send = (text: string) => {
+    getSocket().emit('message', { channelId: active, text });
+    playSfx('send');
+  };
   const createChannel = (channelName: string, type: 'text' | 'voice') =>
     getSocket().emit('channel:create', { name: channelName, type });
 
@@ -168,18 +214,38 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
         activeChannel={active}
         onSelectChannel={setActive}
         onCreateChannel={createChannel}
+        onOpenSettings={() => setSettingsOpen(true)}
         voice={{
           inVoice: voice.inVoice,
           voiceChannel: voice.voiceChannel,
           micOn: voice.micOn,
+          micLive: voice.micLive,
           deafened: voice.deafened,
           connecting: voice.connecting,
-          joinVoice: (id) => void voice.joinVoice(id),
-          leaveVoice: voice.leaveVoice,
-          toggleMic: voice.toggleMic,
-          toggleDeafen: voice.toggleDeafen,
-          startScreen: () => void voice.startScreen(),
-          stopScreen: voice.stopScreen,
+          joinVoice: (id) => {
+            playSfx('join');
+            void voice.joinVoice(id);
+          },
+          leaveVoice: () => {
+            playSfx('leave');
+            voice.leaveVoice();
+          },
+          toggleMic: () => {
+            playSfx(voice.micOn ? 'mute' : 'unmute');
+            voice.toggleMic();
+          },
+          toggleDeafen: () => {
+            playSfx(voice.deafened ? 'unmute' : 'mute');
+            voice.toggleDeafen();
+          },
+          startScreen: () => {
+            playSfx('shareStart');
+            void voice.startScreen();
+          },
+          stopScreen: () => {
+            playSfx('shareStop');
+            voice.stopScreen();
+          },
           isSharing: !!voice.localScreen,
         }}
       />
@@ -203,27 +269,69 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
         </header>
 
         {voice.error && (
-          <div className="border-b border-danger/40 bg-danger/15 px-4 py-2 text-sm text-danger">
-            {voice.error}
+          <div className="flex items-center gap-3 border-b border-danger/40 bg-danger/15 px-4 py-2 text-sm text-danger">
+            <span className="flex-1">{voice.error}</span>
+            <button onClick={voice.clearError} className="shrink-0 text-xs underline">
+              ok
+            </button>
           </div>
         )}
 
-        <Stage shares={shares} />
+        {voice.inVoice && !voice.micLive && !voice.error && (
+          <div className="border-b border-amber-500/40 bg-amber-500/15 px-4 py-2 text-sm text-amber-300">
+            Seu microfone parou de responder — reconectando ele automaticamente...
+          </div>
+        )}
+
+        <Stage
+          shares={shares}
+          volume={settings.outputVolume}
+          deafened={voice.deafened}
+          outputDeviceId={settings.outputDeviceId}
+        />
 
         <Chat channel={activeChannel} messages={messages[active] ?? []} onSend={send} />
       </main>
 
       <MemberList users={users} me={me} speaking={voice.speaking} />
 
-      {/* áudio dos outros participantes */}
-      {Object.entries(voice.remoteAudio).map(([id, stream]) => (
-        <RemoteAudio key={id} stream={stream} muted={voice.deafened} />
-      ))}
+      {/* áudio (microfone) dos outros participantes */}
+      {Object.entries(voice.remoteStreams).map(([id, streams]) =>
+        streams.mic ? (
+          <RemoteAudio
+            key={id}
+            stream={streams.mic}
+            muted={voice.deafened}
+            volume={settings.outputVolume}
+            outputDeviceId={settings.outputDeviceId}
+          />
+        ) : null
+      )}
+
+      {settingsReady && settingsOpen && (
+        <SettingsModal
+          settings={settings}
+          onChange={aplicarSettings}
+          onClose={() => setSettingsOpen(false)}
+          inputLevel={voice.inputLevel}
+          inVoice={voice.inVoice}
+        />
+      )}
     </div>
   );
 }
 
-function RemoteAudio({ stream, muted }: { stream: MediaStream; muted: boolean }) {
+function RemoteAudio({
+  stream,
+  muted,
+  volume,
+  outputDeviceId,
+}: {
+  stream: MediaStream;
+  muted: boolean;
+  volume: number;
+  outputDeviceId: string;
+}) {
   const ref = useRef<HTMLAudioElement>(null);
 
   useEffect(() => {
@@ -233,6 +341,17 @@ function RemoteAudio({ stream, muted }: { stream: MediaStream; muted: boolean })
       el.play().catch(() => {});
     }
   }, [stream]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (el) el.volume = Math.max(0, Math.min(1, volume / 100));
+  }, [volume]);
+
+  useEffect(() => {
+    const el = ref.current as (HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }) | null;
+    if (!el?.setSinkId) return;
+    void el.setSinkId(outputDeviceId).catch(() => {});
+  }, [outputDeviceId]);
 
   return <audio ref={ref} autoPlay playsInline muted={muted} className="hidden" />;
 }

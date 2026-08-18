@@ -2,11 +2,19 @@
 
 import { useEffect, useRef } from 'react';
 import type { User } from '@/lib/types';
-import { Expand, Screen } from './icons';
+import { Expand, Screen, Speaker, SpeakerMuted } from './icons';
 
 export type Share = { user: User; stream: MediaStream; isLocal: boolean };
 
-export function Stage({ shares }: { shares: Share[] }) {
+type Props = {
+  shares: Share[];
+  /** 0-100 */
+  volume: number;
+  deafened: boolean;
+  outputDeviceId: string;
+};
+
+export function Stage({ shares, volume, deafened, outputDeviceId }: Props) {
   if (!shares.length) return null;
 
   return (
@@ -16,15 +24,35 @@ export function Stage({ shares }: { shares: Share[] }) {
         style={{ gridTemplateColumns: `repeat(${Math.min(shares.length, 2)}, minmax(0, 1fr))` }}
       >
         {shares.map((share) => (
-          <Tile key={share.user.id} share={share} solo={shares.length === 1} />
+          <Tile
+            key={share.user.id}
+            share={share}
+            solo={shares.length === 1}
+            volume={volume}
+            deafened={deafened}
+            outputDeviceId={outputDeviceId}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function Tile({ share, solo }: { share: Share; solo: boolean }) {
+function Tile({
+  share,
+  solo,
+  volume,
+  deafened,
+  outputDeviceId,
+}: {
+  share: Share;
+  solo: boolean;
+  volume: number;
+  deafened: boolean;
+  outputDeviceId: string;
+}) {
   const video = useRef<HTMLVideoElement>(null);
+  const temAudio = share.stream.getAudioTracks().length > 0;
 
   useEffect(() => {
     const el = video.current;
@@ -34,13 +62,27 @@ function Tile({ share, solo }: { share: Share; solo: boolean }) {
     }
   }, [share.stream]);
 
+  // o próprio vídeo carrega o som da tela; a nossa própria transmissão fica
+  // sempre muda para não criar realimentação com o alto-falante
+  useEffect(() => {
+    const el = video.current;
+    if (!el) return;
+    el.muted = share.isLocal || deafened;
+    el.volume = Math.max(0, Math.min(1, volume / 100));
+  }, [share.isLocal, deafened, volume]);
+
+  useEffect(() => {
+    const el = video.current as (HTMLVideoElement & { setSinkId?: (id: string) => Promise<void> }) | null;
+    if (!el?.setSinkId || share.isLocal) return;
+    void el.setSinkId(outputDeviceId).catch(() => {});
+  }, [outputDeviceId, share.isLocal]);
+
   return (
     <div className="group relative overflow-hidden rounded-lg bg-black ring-1 ring-ink-400">
       <video
         ref={video}
         autoPlay
         playsInline
-        muted
         className="w-full bg-black object-contain"
         style={{ maxHeight: solo ? '46vh' : '30vh' }}
       />
@@ -48,6 +90,11 @@ function Tile({ share, solo }: { share: Share; solo: boolean }) {
       <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded bg-black/70 px-2 py-1 text-xs text-white">
         <Screen className="h-3.5 w-3.5 text-online" />
         {share.isLocal ? 'Você está transmitindo' : `${share.user.name} está transmitindo`}
+        {temAudio ? (
+          <Speaker className="h-3.5 w-3.5 text-online" />
+        ) : (
+          <SpeakerMuted className="h-3.5 w-3.5 text-mute" />
+        )}
       </div>
 
       <button

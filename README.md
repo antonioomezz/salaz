@@ -37,10 +37,22 @@ npm start
 3. Mande o link para os amigos. Quem abrir só precisa digitar o nome.
 4. Todo mundo conversa por texto na hora.
 5. Clique no canal de voz **🔊 Geral** para entrar na chamada (o navegador vai pedir permissão do microfone).
-6. Dentro da chamada, o botão **Tela** transmite tela inteira, janela ou aba. Os outros veem o vídeo no topo do chat.
-7. Botões de microfone, fone (silenciar todos) e sair da chamada ficam no rodapé da barra lateral.
+6. Dentro da chamada, o botão **Tela** transmite tela inteira, janela ou aba — **com som**. Marque "compartilhar áudio" na janelinha do navegador; funciona melhor compartilhando uma aba do Chrome/Edge.
+7. Botões de microfone, fone (silenciar todos), configurações e sair da chamada ficam no rodapé da barra lateral.
 
 O botão **+** ao lado de "Canais de texto" e "Canais de voz" cria canais novos na hora.
+
+### Configurações de voz (ícone de engrenagem)
+
+- Escolher **microfone** e **saída de áudio** específicos, em vez do padrão do sistema
+- **Volume de entrada** e **de saída**
+- Barra de **teste do microfone** ao vivo
+- Ligar/desligar **cancelamento de eco**, **redução de ruído** e **ganho automático**
+- Ligar/desligar os **efeitos sonoros** e ajustar o volume deles
+
+Mudanças valem na hora, sem derrubar a chamada. Tudo fica salvo no navegador.
+
+> Se a sua voz sumir enquanto alguém transmite tela com som, desligue o **cancelamento de eco**: ele às vezes confunde o som da transmissão com eco e corta sua voz junto.
 
 ---
 
@@ -97,4 +109,7 @@ src/lib/rtc.ts             STUN/TURN — único lugar a mexer para adicionar TUR
 - **Perfect negotiation:** os dois lados podem mandar oferta ao mesmo tempo sem quebrar a conexão — quem é "polite" cede.
 - **Fila de candidatos ICE:** candidatos que chegam antes da descrição remota ficam guardados e são aplicados depois. Sem isso, quem entra na chamada com ela já rolando fica preso sem áudio.
 - **O estado de quem está na voz vem do servidor,** não do cliente, para os participantes nunca divergirem sobre quem está onde.
+- **Vigia do microfone:** no Windows, abrir a captura de tela pode reiniciar o subsistema de áudio e matar a track do microfone. Um watchdog detecta isso (track `ended` ou `muted`), recaptura o microfone e troca a track nas conexões com `replaceTrack` — sem renegociar e sem derrubar a chamada.
+- **Microfone e som da tela são streams separadas.** Chegam pela mesma conexão mas são classificadas por stream: a que tem vídeo é a tela (e o `<video>` toca o som dela), a que só tem áudio é o microfone. Sem essa separação, o som da tela sobrescreveria o microfone de quem transmite.
+- **Efeitos sonoros são sintetizados em WebAudio**, sem nenhum arquivo de áudio no repositório.
 - **Salas em memória:** reiniciar o servidor apaga tudo. Salas vazias são descartadas depois de 2h.
