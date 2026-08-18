@@ -1,0 +1,66 @@
+@import 'tailwindcss';
+
+@theme {
+  /* paleta escura no espírito do Discord */
+  --color-ink-900: #1a1b1e;
+  --color-ink-800: #1e1f22;
+  --color-ink-700: #232428;
+  --color-ink-600: #2b2d31;
+  --color-ink-500: #313338;
+  --color-ink-400: #383a40;
+  --color-ink-300: #404249;
+  --color-ink-200: #4e5058;
+
+  --color-mute: #949ba4;
+  --color-soft: #b5bac1;
+  --color-bright: #dbdee1;
+
+  --color-blurple: #5865f2;
+  --color-blurple-dark: #4752c4;
+  --color-online: #23a55a;
+  --color-danger: #da373c;
+  --color-danger-dark: #a12828;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--color-ink-500);
+  color: var(--color-bright);
+  font-family: 'Segoe UI', ui-sans-serif, system-ui, -apple-system, 'Helvetica Neue', sans-serif;
+  overscroll-behavior: none;
+}
+
+/* scrollbar estilo Discord */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-ink-800);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #111214;
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.pop-in {
+  animation: pop-in 0.12s ease-out;
+}

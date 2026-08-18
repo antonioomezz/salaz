@@ -1,0 +1,13 @@
+# Blueprint do Render: com este arquivo no repositório, o Render
+# configura o serviço sozinho — não precisa preencher nada na mão.
+services:
+  - type: web
+    name: salaz
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 24.18.0
