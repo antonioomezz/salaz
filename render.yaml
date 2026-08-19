@@ -2,7 +2,7 @@
 # configura o serviço sozinho — não precisa preencher nada na mão.
 services:
   - type: web
-    name: salaz
+    name: negoneycord
     runtime: node
     plan: free
     buildCommand: npm ci && npm run build
