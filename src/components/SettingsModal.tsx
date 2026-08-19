@@ -68,20 +68,21 @@ export function SettingsModal({
       onClick={onClose}
     >
       <div
-        className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-lg bg-ink-500 shadow-2xl"
+        className="flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-ink-500 shadow-2xl ring-1 ring-white/5"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-ink-400 px-6 py-4">
+        <div className="flex shrink-0 items-center justify-between border-b border-ink-400 px-6 py-4">
           <h2 className="text-lg font-bold text-white">Configurações de voz</h2>
           <button
             onClick={onClose}
             className="rounded px-2 py-1 text-mute transition hover:bg-ink-400 hover:text-white"
           >
-            ✕
+            <span aria-hidden>&times;</span>
+            <span className="sr-only">Fechar</span>
           </button>
         </div>
 
-        <div className="space-y-6 px-6 py-5">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 py-5">
           {semPermissao && (
             <p className="rounded bg-blurple/15 px-3 py-2 text-xs text-soft">
               Entre em um canal de voz uma vez para o navegador liberar os nomes dos dispositivos.
@@ -104,16 +105,18 @@ export function SettingsModal({
             </select>
           </Section>
 
-          <Slider
-            label="Volume de entrada"
-            value={settings.inputVolume}
-            max={200}
-            onChange={(v) => set('inputVolume', v)}
-            hint={settings.inputVolume === 100 ? 'sinal original, sem processamento' : undefined}
-          />
+          <div className="rounded-lg bg-ink-600/50 p-4">
+            <Slider
+              label="Volume de entrada"
+              value={settings.inputVolume}
+              max={200}
+              onChange={(v) => set('inputVolume', v)}
+              hint={settings.inputVolume === 100 ? 'sinal original, sem processamento' : undefined}
+            />
+          </div>
 
           {/* ------------------------------------------------ teste do mic */}
-          <div>
+          <div className="rounded-lg bg-ink-600/50 p-4">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-bold tracking-wide text-soft uppercase">
                 Testar microfone
@@ -155,12 +158,14 @@ export function SettingsModal({
             )}
           </Section>
 
-          <Slider
-            label="Volume de saída"
-            value={settings.outputVolume}
-            max={100}
-            onChange={(v) => set('outputVolume', v)}
-          />
+          <div className="rounded-lg bg-ink-600/50 p-4">
+            <Slider
+              label="Volume de saída"
+              value={settings.outputVolume}
+              max={100}
+              onChange={(v) => set('outputVolume', v)}
+            />
+          </div>
 
           {/* ------------------------------------------------ processamento */}
           <Section icon={<Screen className="h-4 w-4" />} title="Processamento de voz">
@@ -264,7 +269,7 @@ export function SettingsModal({
 
             {playingFile ? (
               <div className="flex items-center gap-2 rounded bg-ink-400 p-2">
-                <span className="min-w-0 flex-1 truncate text-xs text-bright">🎵 {playingFile}</span>
+                <span className="min-w-0 flex-1 truncate text-xs text-bright">{playingFile}</span>
                 <button
                   onClick={onStopFile}
                   className="rounded bg-danger px-2 py-1 text-[11px] font-medium text-white transition hover:bg-danger-dark"
@@ -327,7 +332,7 @@ export function SettingsModal({
           </Section>
         </div>
 
-        <div className="flex items-center justify-between border-t border-ink-400 px-6 py-4">
+        <div className="flex shrink-0 items-center justify-between border-t border-ink-400 px-6 py-4">
           <button
             onClick={() => onChange({ ...DEFAULT_SETTINGS })}
             className="text-xs text-mute transition hover:text-white"
@@ -356,13 +361,13 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <div className="mb-2 flex items-center gap-1.5 text-xs font-bold tracking-wide text-soft uppercase">
+    <section className="rounded-lg bg-ink-600/50 p-4">
+      <div className="mb-3 flex items-center gap-2 text-xs font-bold tracking-wide text-soft uppercase">
         {icon}
         {title}
       </div>
       {children}
-    </div>
+    </section>
   );
 }
 

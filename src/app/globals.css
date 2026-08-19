@@ -64,3 +64,57 @@ body {
 .pop-in {
   animation: pop-in 0.12s ease-out;
 }
+
+/* foco visível só para quem navega por teclado */
+:focus-visible {
+  outline: 2px solid var(--color-blurple);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+button:focus:not(:focus-visible),
+input:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* leitor de tela apenas */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* sliders com aparência consistente entre navegadores */
+input[type='range'] {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--color-ink-900);
+  appearance: none;
+  cursor: pointer;
+}
+input[type='range']::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.4);
+}
+input[type='range']:disabled {
+  cursor: not-allowed;
+}
+
+/* respeita quem prefere menos movimento */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

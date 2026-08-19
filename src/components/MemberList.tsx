@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { User } from '@/lib/types';
 import { getUserAudio, type UserAudio, type UserAudioMap } from '@/lib/userVolumes';
 import { Avatar } from './Avatar';
+import { BotAvatar } from './Brand';
 import { UserVolume } from './UserVolume';
 import { Camera, MicOff, Screen, Speaker, SpeakerMuted } from './icons';
 
@@ -33,9 +34,7 @@ export function MemberList({
       <div className="mb-2 px-2 text-[11px] font-bold tracking-wider text-mute uppercase">Bot — 1</div>
       <div className="mb-4 flex items-center gap-2.5 rounded px-2 py-1.5">
         <div className="relative">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blurple text-base">
-            🎵
-          </div>
+          <BotAvatar size={32} />
           <span
             className={`absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-[2.5px] border-ink-600 ${
               botTocando ? 'bg-online' : 'bg-ink-200'
@@ -44,11 +43,11 @@ export function MemberList({
         </div>
         <span className="min-w-0 flex-1">
           <span className="flex items-center gap-1.5">
-            <span className="truncate text-[15px] font-medium text-bright">Negoneycord</span>
+            <span className="truncate text-[15px] font-medium text-bright">Nego Ney</span>
             <span className="rounded bg-blurple px-1 py-px text-[9px] font-bold text-white">BOT</span>
           </span>
           <span className="block truncate text-[11px] text-mute">
-            {botTocando ? `♪ ${botTocando}` : 'ocioso — digite ;play'}
+            {botTocando ? botTocando : 'ocioso — digite ;play'}
           </span>
         </span>
       </div>

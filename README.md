@@ -74,6 +74,8 @@ Comandos no chat de texto:
 | `;queue` | mostra a fila |
 | `;help` | lista os comandos |
 
+O bot se chama **Nego Ney** e aparece na lista da direita como um membro.
+
 `;` e `;;` fazem a mesma coisa — um é atalho do outro. O comando que você digita
 fica no chat como mensagem normal, e o bot responde embaixo. Ele também aparece na
 lista da direita como um membro, mostrando o que está tocando.

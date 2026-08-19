@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { Channel, Message } from '@/lib/types';
 import { compressImage, isImageFile, type CompressedImage } from '@/lib/imageCompress';
 import { Avatar } from './Avatar';
+import { BotAvatar } from './Brand';
 import { Clip, Send } from './icons';
 
 const time = (ts: number) =>
@@ -100,9 +101,7 @@ export function Chat({ channel, messages, onSend }: Props) {
             <div key={m.id} className={`pop-in flex gap-3 px-1 ${grouped ? 'mt-0.5' : 'mt-4'}`}>
               <div className="w-10 shrink-0">
                 {ehBot ? (
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blurple text-lg">
-                    🎵
-                  </div>
+                  <BotAvatar size={40} />
                 ) : grouped ? null : (
                   <Avatar user={m} size={40} />
                 )}
@@ -112,7 +111,7 @@ export function Chat({ channel, messages, onSend }: Props) {
                 {!grouped && (
                   <div className="flex items-baseline gap-2">
                     <span className="font-semibold" style={{ color: ehBot ? '#5865f2' : m.color }}>
-                      {ehBot ? 'Negoneycord' : m.name}
+                      {ehBot ? 'Nego Ney' : m.name}
                     </span>
                     {ehBot && (
                       <span className="rounded bg-blurple px-1 py-px text-[10px] font-bold text-white">

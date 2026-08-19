@@ -223,7 +223,7 @@ function falarBot(io, room, channelId, text, card) {
     id: id(10),
     channelId: String(channelId),
     userId: 'bot',
-    name: 'Negoneycord',
+    name: 'Nego Ney',
     color: '#5865f2',
     text,
     ts: Date.now(),
