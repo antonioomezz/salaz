@@ -213,8 +213,8 @@ export function SettingsModal({
             <div className="flex gap-2">
               {(
                 [
-                  ['detail', 'Texto e código', 'Prioriza nitidez; menos quadros por segundo'],
-                  ['motion', 'Vídeo e jogo', 'Prioriza fluidez; 60 fps e mais banda'],
+                  ['detail', 'Texto e código', '30 fps · mantém a nitidez, perde quadros se faltar banda'],
+                  ['motion', 'Vídeo e jogo', '60 fps · mantém os quadros, baixa a resolução se faltar banda'],
                 ] as const
               ).map(([valor, titulo, desc]) => (
                 <button
@@ -231,8 +231,9 @@ export function SettingsModal({
                 </button>
               ))}
             </div>
-            <p className="mt-2 text-[11px] text-mute">
-              Vale na próxima vez que você começar a transmitir.
+            <p className="mt-2 text-[11px] leading-tight text-mute">
+              Se a live estiver travada, use <b>Vídeo e jogo</b>. A troca de banda vale na hora;
+              a taxa de captura só muda quando você recomeçar a transmissão.
             </p>
           </Section>
 

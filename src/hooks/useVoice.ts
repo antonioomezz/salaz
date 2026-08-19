@@ -32,6 +32,9 @@ type Peer = {
  */
 export type PeerStreams = { mic?: MediaStream; videos: MediaStream[] };
 
+/** o que está realmente saindo na transmissão de tela, medido do encoder */
+export type ScreenStats = { width: number; height: number; fps: number; kbps: number };
+
 type Params = {
   myId: string | null;
   /** ids dos outros usuários que estão no MESMO canal de voz que eu */
@@ -63,6 +66,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
   const [error, setError] = useState<string | null>(null);
   const [localScreen, setLocalScreen] = useState<MediaStream | null>(null);
   const [localCam, setLocalCam] = useState<MediaStream | null>(null);
+  const [screenStats, setScreenStats] = useState<ScreenStats | null>(null);
   const [screenHasAudio, setScreenHasAudio] = useState(false);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, PeerStreams>>({});
   const [speaking, setSpeaking] = useState<Record<string, boolean>>({});
@@ -170,9 +174,53 @@ export function useVoice({ myId, peerIds, settings }: Params) {
 
   /** Aplica codec, bitrate e preferência de degradação no envio de tela. */
   const afinarEnvioDeTela = useCallback((pc: RTCPeerConnection, sender: RTCRtpSender) => {
+    const preset = cfg.current.screenPreset;
     const transceiver = pc.getTransceivers().find((t) => t.sender === sender);
-    if (transceiver) preferScreenCodecs(transceiver);
-    void tuneScreenSender(sender, cfg.current.screenPreset);
+    if (transceiver) preferScreenCodecs(transceiver, preset);
+    void tuneScreenSender(sender, preset, peers.current.size);
+  }, []);
+
+  /**
+   * Reajusta o teto de banda quando entra ou sai gente: numa malha P2P cada
+   * espectador a mais é uma cópia a mais saindo do seu upload.
+   */
+  const reajustarBandaDaTela = useCallback(() => {
+    const preset = cfg.current.screenPreset;
+    const quantos = peers.current.size;
+    for (const peer of peers.current.values()) {
+      if (peer.screenVideoSender) void tuneScreenSender(peer.screenVideoSender, preset, quantos);
+    }
+  }, []);
+
+  /**
+   * Troca o codec da transmissão de tela.
+   *
+   * setCodecPreferences só vale numa negociação nova, e reaproveitar o sender
+   * com replaceTrack não gera negociação nenhuma — o codec ficaria preso no que
+   * foi escolhido da primeira vez. Por isso removemos e recriamos a track: é o
+   * que garante que o preset realmente troque AV1 por VP9/H264.
+   */
+  const recriarEnvioDeTela = useCallback(() => {
+    const stream = screenStream.current;
+    const video = stream?.getVideoTracks()[0];
+    if (!stream || !video) return;
+
+    const preset = cfg.current.screenPreset;
+    const quantos = peers.current.size;
+
+    for (const peer of peers.current.values()) {
+      try {
+        if (peer.screenVideoSender) peer.pc.removeTrack(peer.screenVideoSender);
+        peer.screenVideoSender = peer.pc.addTrack(video, stream);
+        const transceiver = peer.pc
+          .getTransceivers()
+          .find((t) => t.sender === peer.screenVideoSender);
+        if (transceiver) preferScreenCodecs(transceiver, preset);
+        void tuneScreenSender(peer.screenVideoSender, preset, quantos);
+      } catch {
+        /* se falhar, a transmissão segue no codec anterior */
+      }
+    }
   }, []);
 
   const pushMicToPeers = useCallback((track: MediaStreamTrack) => {
@@ -258,6 +306,49 @@ export function useVoice({ myId, peerIds, settings }: Params) {
       navigator.mediaDevices.removeEventListener?.('devicechange', onDeviceChange);
     };
   }, [inVoice]);
+
+  /**
+   * Mede o que o encoder está de fato enviando. Sem isso é impossível saber se
+   * a transmissão caiu de resolução ou de fps — e o palpite costuma errar.
+   */
+  useEffect(() => {
+    if (!localScreen) return;
+    let anterior: { bytes: number; frames: number; ts: number } | null = null;
+
+    const timer = setInterval(async () => {
+      const sender = [...peers.current.values()].find((p) => p.screenVideoSender)?.screenVideoSender;
+      if (!sender) return;
+      try {
+        const stats = await sender.getStats();
+        stats.forEach((s) => {
+          if (s.type !== 'outbound-rtp' || s.kind !== 'video') return;
+          const bytes = s.bytesSent ?? 0;
+          const frames = s.framesSent ?? 0;
+          const ts = s.timestamp ?? 0;
+
+          let kbps = 0;
+          let fps = s.framesPerSecond ?? 0;
+          if (anterior && ts > anterior.ts) {
+            const dt = (ts - anterior.ts) / 1000;
+            kbps = Math.round(((bytes - anterior.bytes) * 8) / dt / 1000);
+            if (!fps) fps = Math.round((frames - anterior.frames) / dt);
+          }
+          anterior = { bytes, frames, ts };
+
+          setScreenStats({
+            width: s.frameWidth ?? 0,
+            height: s.frameHeight ?? 0,
+            fps: Math.round(fps),
+            kbps,
+          });
+        });
+      } catch {
+        /* sem estatísticas neste navegador */
+      }
+    }, 2000);
+
+    return () => clearInterval(timer);
+  }, [localScreen]);
 
   // ---------------------------------------------------------------- peers
   const dropPeer = useCallback(
@@ -373,7 +464,8 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     const wanted = new Set(peerIds);
     for (const id of wanted) createPeer(id);
     for (const id of [...peers.current.keys()]) if (!wanted.has(id)) dropPeer(id);
-  }, [peerIds, inVoice, createPeer, dropPeer]);
+    if (screenStream.current) reajustarBandaDaTela();
+  }, [peerIds, inVoice, createPeer, dropPeer, reajustarBandaDaTela]);
 
   // ---------------------------------------------------------- sinalização
   useEffect(() => {
@@ -649,6 +741,13 @@ export function useVoice({ myId, peerIds, settings }: Params) {
       cfg.current = next;
       if (!micStream.current) return;
 
+      if (next.screenPreset !== previous.screenPreset && screenStream.current) {
+        const video = screenStream.current.getVideoTracks()[0];
+        if (video) applyContentHint(video, next.screenPreset);
+        // recria para o codec do novo preset valer de verdade
+        recriarEnvioDeTela();
+      }
+
       const precisaRecapturar =
         next.inputDeviceId !== previous.inputDeviceId ||
         next.echoCancellation !== previous.echoCancellation ||
@@ -681,7 +780,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
         setError('Não consegui aplicar as configurações de áudio nesse dispositivo.');
       }
     },
-    [acquireMic, buildOutgoing, pushMicToPeers]
+    [acquireMic, buildOutgoing, pushMicToPeers, recriarEnvioDeTela]
   );
 
   // encerra tudo ao desmontar
@@ -712,6 +811,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     error,
     localScreen,
     localCam,
+    screenStats,
     screenHasAudio,
     remoteStreams,
     speaking,

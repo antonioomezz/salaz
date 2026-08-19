@@ -17,13 +17,15 @@ export type Tile = {
 
 type Props = {
   tiles: Tile[];
+  /** medição da própria transmissão de tela, se houver */
+  screenStats?: { width: number; height: number; fps: number; kbps: number } | null;
   /** 0-100 */
   volume: number;
   deafened: boolean;
   outputDeviceId: string;
 };
 
-export function Stage({ tiles, volume, deafened, outputDeviceId }: Props) {
+export function Stage({ tiles, screenStats, volume, deafened, outputDeviceId }: Props) {
   if (!tiles.length) return null;
 
   // telas ocupam a linha de cima e mandam no layout; câmeras ficam menores
@@ -45,6 +47,7 @@ export function Stage({ tiles, volume, deafened, outputDeviceId }: Props) {
               volume={(volume / 100) * t.userVolume}
               deafened={deafened}
               outputDeviceId={outputDeviceId}
+              stats={t.isLocal ? screenStats : null}
             />
           ))}
         </div>
@@ -76,6 +79,7 @@ function VideoTile({
   deafened,
   outputDeviceId,
   compact = false,
+  stats = null,
 }: {
   tile: Tile;
   maxHeight: string;
@@ -83,6 +87,7 @@ function VideoTile({
   deafened: boolean;
   outputDeviceId: string;
   compact?: boolean;
+  stats?: { width: number; height: number; fps: number; kbps: number } | null;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const temAudio = tile.stream.getAudioTracks().length > 0;
@@ -144,6 +149,20 @@ function VideoTile({
             <SpeakerMuted className="h-3.5 w-3.5 text-mute" />
           ))}
       </div>
+
+      {stats && stats.width > 0 && (
+        <div
+          className="absolute top-1.5 left-1.5 rounded bg-black/70 px-2 py-1 font-mono text-[10px]"
+          title="O que está realmente saindo daqui"
+        >
+          <span className={stats.height >= 1080 ? 'text-online' : 'text-amber-400'}>
+            {stats.width}×{stats.height}
+          </span>
+          <span className="text-mute"> · </span>
+          <span className={stats.fps >= 50 ? 'text-online' : 'text-amber-400'}>{stats.fps} fps</span>
+          <span className="text-mute"> · {(stats.kbps / 1000).toFixed(1)} Mbps</span>
+        </div>
+      )}
 
       <button
         onClick={() => video.current?.requestFullscreen?.()}

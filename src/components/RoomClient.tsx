@@ -364,6 +364,7 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
 
         <Stage
           tiles={tiles}
+          screenStats={voice.localScreen ? voice.screenStats : null}
           volume={settings.outputVolume}
           deafened={voice.deafened}
           outputDeviceId={settings.outputDeviceId}

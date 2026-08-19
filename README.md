@@ -188,6 +188,11 @@ src/lib/rtc.ts             STUN/TURN — único lugar a mexer para adicionar TUR
   pessoa anuncia pelo servidor os ids das suas MediaStreams (`camStreamId`, `screenStreamId`) e o
   receptor usa isso para montar os quadros. Sem isso, câmera e tela se confundiriam.
 - **Efeitos sonoros são sintetizados em WebAudio**, sem nenhum arquivo de áudio no repositório.
+- **1080p60 depende do codec.** O AV1 comprime melhor, mas quase sempre é codificado por
+  software e não dá conta de 1080p60 — trava justamente a fluidez. Por isso o preset
+  "Vídeo e jogo" prefere VP9 e H264, que costumam usar o encoder da placa de vídeo. E como
+  `setCodecPreferences` só vale em negociação nova, trocar o preset **recria** a track de
+  vídeo; sem isso o codec ficaria preso no da primeira transmissão.
 - **Qualidade da tela é configurada explicitamente.** Sem `contentHint`, `maxBitrate` e
   `degradationPreference`, o navegador degradava a transmissão para 320x180 por conta própria.
   Com eles, e preferindo AV1/VP9, a tela chega em 1920x1080.
