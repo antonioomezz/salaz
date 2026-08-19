@@ -68,11 +68,26 @@ Comandos no chat de texto:
 
 | Comando | O que faz |
 | --- | --- |
-| `;play <link do YouTube>` | toca na hora, ou põe na fila |
+| `;play hino do vasco` | procura no YouTube e toca a primeira que achar |
+| `;play <link do YouTube>` | toca esse vídeo direto |
 | `;pause` `;resume` `;skip` `;stop` | controla quem está tocando |
 | `;queue` | mostra a fila |
-| `;;play <link do Spotify>` | mostra a música (não toca — veja abaixo) |
 | `;help` | lista os comandos |
+
+`;` e `;;` fazem a mesma coisa — um é atalho do outro. O comando que você digita
+fica no chat como mensagem normal, e o bot responde embaixo. Ele também aparece na
+lista da direita como um membro, mostrando o que está tocando.
+
+### Busca do bot
+
+Sem configuração nenhuma, a busca lê a página de resultados do YouTube e pega o primeiro
+vídeo. **Funciona, mas é frágil**: é um uso não previsto pelo YouTube e quebra se eles
+mudarem o layout da página.
+
+Para deixar estável, crie uma chave gratuita da **YouTube Data API v3** e defina a variável
+de ambiente `YOUTUBE_API_KEY` (no Render: Environment → Add Environment Variable). Com ela
+o bot passa a usar a API oficial e ignora o caminho frágil. A cota gratuita dá cerca de
+100 buscas por dia.
 
 O servidor guarda a posição da música e sincroniza todo mundo: o player de cada um se corrige
 sozinho quando a defasagem passa de 1,5s. Quem entra depois já cai no ponto certo.
@@ -83,8 +98,8 @@ música do Discord em 2021. Efeito prático é o mesmo: todos ouvem juntos, e ca
 próprio volume.
 
 **Spotify não pode ser transmitido.** Não existe forma legítima de mandar áudio do Spotify
-para fora do app deles. O `;;play` mostra a capa e o nome da faixa e sugere mandar o link do
-YouTube.
+para fora do app deles. Um link do Spotify vira só um cartão com capa e nome — e o bot sugere
+mandar o nome da música, que aí ele procura no YouTube e toca.
 
 ### Tocar um arquivo de áudio na chamada
 

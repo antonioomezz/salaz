@@ -128,6 +128,51 @@ async function oembed(endpoint, url) {
   }
 }
 
+/**
+ * Procura um vídeo no YouTube a partir de texto livre.
+ *
+ * Com YOUTUBE_API_KEY definida usa a API oficial (recomendado: estável e
+ * dentro dos termos). Sem a chave, cai para ler a página de resultados e pegar
+ * o primeiro vídeo — funciona hoje, mas é frágil: qualquer mudança de layout
+ * do YouTube quebra, e não é um uso previsto por eles.
+ */
+async function buscarNoYoutube(termo) {
+  const chave = process.env.YOUTUBE_API_KEY;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 8000);
+
+  try {
+    if (chave) {
+      const url =
+        'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1' +
+        `&q=${encodeURIComponent(termo)}&key=${chave}`;
+      const res = await fetch(url, { signal: controller.signal });
+      if (!res.ok) return null;
+      const json = await res.json();
+      const item = json.items?.[0];
+      return item?.id?.videoId ?? null;
+    }
+
+    const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(termo)}`;
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        'user-agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+        'accept-language': 'pt-BR,pt;q=0.9',
+      },
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    const m = html.match(/"videoId":"([A-Za-z0-9_-]{11})"/);
+    return m ? m[1] : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function estadoDoPlayer(room) {
   const p = room.player;
   return {
@@ -278,44 +323,76 @@ app.prepare().then(() => {
 
       const canal = String(channelId);
       const bruto = text.trim();
-      const spotify = bruto.startsWith(';;');
-      const corpo = bruto.slice(spotify ? 2 : 1).trim();
+
+      // o que a pessoa digitou aparece no chat como mensagem normal, senão o
+      // comando some e só sobra a resposta do bot
+      const eco = {
+        id: id(10),
+        channelId: canal,
+        userId: user.id,
+        name: user.name,
+        color: user.color,
+        text: bruto.slice(0, 2000),
+        ts: Date.now(),
+        kind: 'text',
+      };
+      const bucketEco = (room.messages[canal] ||= []);
+      bucketEco.push(eco);
+      if (bucketEco.length > 200) bucketEco.shift();
+      io.to(room.id).emit('message', eco);
+
+      // ';' e ';;' fazem a mesma coisa: um é só atalho do outro
+      const corpo = bruto.replace(/^;+/, '').trim();
       const [comando, ...resto] = corpo.split(/\s+/);
       const arg = resto.join(' ').trim();
       const p = room.player;
 
       const ajuda = [
-        ';play <link do YouTube> — toca ou põe na fila',
+        ';play <link ou nome da música> — toca ou põe na fila',
+        '   exemplos:  ;play hino do vasco     ;play https://youtu.be/...',
         ';pause  ;resume  ;skip  ;stop',
         ';queue — mostra a fila',
-        ';;play <link do Spotify> — mostra a música (o Spotify não pode ser transmitido)',
+        'Links do Spotify viram só um cartão: não dá para transmitir áudio de lá.',
       ].join('\n');
 
       if (comando === 'help' || !comando) return falarBot(io, room, canal, ajuda);
 
       if (comando === 'play') {
-        if (!arg) return falarBot(io, room, canal, 'Faltou o link. Exemplo: ;play https://youtu.be/...');
+        if (!arg) {
+          return falarBot(io, room, canal, 'Faltou dizer o quê. Exemplo: ;play hino do vasco');
+        }
 
-        if (spotify || ehSpotify(arg)) {
+        // link do Spotify: só dá para mostrar, não para tocar
+        if (ehSpotify(arg)) {
           const info = await oembed('https://open.spotify.com/oembed', arg);
-          if (!info) return falarBot(io, room, canal, 'Não consegui ler esse link do Spotify.');
           return falarBot(
             io,
             room,
             canal,
-            `${user.name} compartilhou. O Spotify não permite transmitir áudio para fora do app dele — manda o link do YouTube que eu toco pra todo mundo.`,
+            `${user.name} compartilhou. O Spotify não permite transmitir áudio para fora do app dele — me manda o nome que eu procuro no YouTube.`,
             {
               source: 'spotify',
-              title: info.title || 'Música no Spotify',
-              subtitle: info.provider_name || 'Spotify',
-              thumb: info.thumbnail_url,
+              title: info?.title || 'Música no Spotify',
+              subtitle: info?.provider_name || 'Spotify',
+              thumb: info?.thumbnail_url,
               url: arg,
             }
           );
         }
 
-        const videoId = youtubeId(arg);
-        if (!videoId) return falarBot(io, room, canal, 'Não reconheci esse link do YouTube.');
+        // link do YouTube toca direto; qualquer outra coisa vira busca
+        let videoId = youtubeId(arg);
+        if (!videoId) {
+          const pareceLink = arg.startsWith('http://') || arg.startsWith('https://');
+          if (pareceLink) {
+            return falarBot(io, room, canal, 'Não reconheci esse link. Mando o do YouTube ou só o nome da música.');
+          }
+          falarBot(io, room, canal, `Procurando "${arg}" no YouTube...`);
+          videoId = await buscarNoYoutube(arg);
+          if (!videoId) {
+            return falarBot(io, room, canal, `Não achei nada para "${arg}". Tenta outro nome ou manda o link.`);
+          }
+        }
 
         const info = await oembed('https://www.youtube.com/oembed', `https://www.youtube.com/watch?v=${videoId}`);
         const faixa = {

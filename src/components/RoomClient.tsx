@@ -378,6 +378,7 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
         speaking={voice.speaking}
         userAudio={userAudio}
         onUserAudioChange={alterarVolumeDe}
+        botTocando={player.current ? player.current.title : null}
       />
 
       {/* áudio (microfone) dos outros participantes */}
