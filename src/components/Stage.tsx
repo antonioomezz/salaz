@@ -159,7 +159,6 @@ function VideoTile({
           <span className={stats.height >= 1080 ? 'text-online' : 'text-amber-400'}>
             {stats.width}×{stats.height}
           </span>
-          <span className="text-mute"> · </span>
           <span className="text-mute"> · captura </span>
           <span className={stats.captureFps >= 50 ? 'text-online' : 'text-amber-400'}>
             {stats.captureFps}
