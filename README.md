@@ -1,6 +1,7 @@
-# Salaz
+# Negoneycord
 
-Mini-Discord: salas por link, chat em tempo real, chamada de voz em grupo e compartilhamento de tela.
+Mini-Discord: salas por link, chat em tempo real, chamada de voz em grupo, câmera e
+compartilhamento de tela.
 
 Sem banco de dados, sem Docker, sem login. As salas vivem na memória do servidor.
 
@@ -38,7 +39,9 @@ npm start
 4. Todo mundo conversa por texto na hora.
 5. Clique no canal de voz **🔊 Geral** para entrar na chamada (o navegador vai pedir permissão do microfone).
 6. Dentro da chamada, o botão **Tela** transmite tela inteira, janela ou aba — **com som**. Marque "compartilhar áudio" na janelinha do navegador; funciona melhor compartilhando uma aba do Chrome/Edge.
-7. Botões de microfone, fone (silenciar todos), configurações e sair da chamada ficam no rodapé da barra lateral.
+7. O botão **Câmera** liga a webcam. Câmera e tela funcionam ao mesmo tempo e aparecem como
+   quadros separados.
+8. Botões de microfone, fone (silenciar todos), configurações e sair da chamada ficam no rodapé da barra lateral.
 
 O botão **+** ao lado de "Canais de texto" e "Canais de voz" cria canais novos na hora.
 
@@ -91,7 +94,7 @@ o áudio de um iframe é de outra origem e o navegador não deixa capturar.
 
 ### Configurações de voz (ícone de engrenagem)
 
-- Escolher **microfone** e **saída de áudio** específicos, em vez do padrão do sistema
+- Escolher **microfone**, **saída de áudio** e **câmera** específicos, em vez do padrão do sistema
 - **Volume de entrada** e **de saída**
 - Barra de **teste do microfone** ao vivo
 - Ligar/desligar **cancelamento de eco**, **redução de ruído** e **ganho automático**
@@ -159,7 +162,10 @@ src/lib/rtc.ts             STUN/TURN — único lugar a mexer para adicionar TUR
 - **Fila de candidatos ICE:** candidatos que chegam antes da descrição remota ficam guardados e são aplicados depois. Sem isso, quem entra na chamada com ela já rolando fica preso sem áudio.
 - **O estado de quem está na voz vem do servidor,** não do cliente, para os participantes nunca divergirem sobre quem está onde.
 - **Vigia do microfone:** no Windows, abrir a captura de tela pode reiniciar o subsistema de áudio e matar a track do microfone. Um watchdog detecta isso (track `ended` ou `muted`), recaptura o microfone e troca a track nas conexões com `replaceTrack` — sem renegociar e sem derrubar a chamada.
-- **Microfone e som da tela são streams separadas.** Chegam pela mesma conexão mas são classificadas por stream: a que tem vídeo é a tela (e o `<video>` toca o som dela), a que só tem áudio é o microfone. Sem essa separação, o som da tela sobrescreveria o microfone de quem transmite.
+- **Cada tipo de mídia é uma stream separada.** Chegam pela mesma conexão, e o track remoto não
+  diz de onde veio. A que só tem áudio é o microfone; para distinguir **câmera de tela**, cada
+  pessoa anuncia pelo servidor os ids das suas MediaStreams (`camStreamId`, `screenStreamId`) e o
+  receptor usa isso para montar os quadros. Sem isso, câmera e tela se confundiriam.
 - **Efeitos sonoros são sintetizados em WebAudio**, sem nenhum arquivo de áudio no repositório.
 - **Qualidade da tela é configurada explicitamente.** Sem `contentHint`, `maxBitrate` e
   `degradationPreference`, o navegador degradava a transmissão para 320x180 por conta própria.

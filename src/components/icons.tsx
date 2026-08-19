@@ -97,3 +97,16 @@ export const Clip = ({ className = base }: P) => (
     <path d="M16.5 6.5v9a4.5 4.5 0 11-9 0V6a3 3 0 116 0v9a1.5 1.5 0 11-3 0V7H9v8a3 3 0 106 0V6a4.5 4.5 0 10-9 0v9.5a6 6 0 1012 0v-9h-1.5z" />
   </svg>
 );
+
+export const Camera = ({ className = base }: P) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <path d="M4 6a2 2 0 00-2 2v8a2 2 0 002 2h9a2 2 0 002-2V8a2 2 0 00-2-2H4zm13.4 3.2a1 1 0 011.6.8v4a1 1 0 01-1.6.8L16 14v-4l1.4-.8z" />
+  </svg>
+);
+
+export const CameraOff = ({ className = base }: P) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <path d="M3.7 2.3a1 1 0 00-1.4 1.4l1.5 1.5A2 2 0 002 7v8a2 2 0 002 2h9c.3 0 .6-.1.9-.2l4.4 4.4a1 1 0 001.4-1.4L3.7 2.3z" />
+    <path d="M15 8v4.2l-6-6H13a2 2 0 012 2zm2.4.2a1 1 0 011.6.8v4a1 1 0 01-1.6.8L16 13v-4l1.4-.8z" />
+  </svg>
+);

@@ -18,14 +18,19 @@ type Peer = {
   makingOffer: boolean;
   ignoreOffer: boolean;
   micSender: RTCRtpSender | null;
+  camSender: RTCRtpSender | null;
   screenVideoSender: RTCRtpSender | null;
   screenAudioSender: RTCRtpSender | null;
   /** candidatos que chegaram antes da descrição remota; aplicados depois */
   pendingCandidates: RTCIceCandidateInit[];
 };
 
-/** streams recebidas de um participante, já separadas por finalidade */
-export type PeerStreams = { mic?: MediaStream; screen?: MediaStream };
+/**
+ * Streams recebidas de um participante. A de áudio puro é sempre o microfone;
+ * as de vídeo podem ser câmera ou tela, e quem separa é o RoomClient usando os
+ * ids que o dono anuncia pelo servidor (o track remoto não carrega essa info).
+ */
+export type PeerStreams = { mic?: MediaStream; videos: MediaStream[] };
 
 type Params = {
   myId: string | null;
@@ -47,6 +52,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
   /** o que realmente enviamos (igual à crua, ou passada por um ganho) */
   const outgoingMic = useRef<MediaStreamTrack | null>(null);
   const micStream = useRef<MediaStream | null>(null);
+  const camStream = useRef<MediaStream | null>(null);
   const screenStream = useRef<MediaStream | null>(null);
 
   const [voiceChannel, setVoiceChannel] = useState<string | null>(null);
@@ -56,6 +62,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [localScreen, setLocalScreen] = useState<MediaStream | null>(null);
+  const [localCam, setLocalCam] = useState<MediaStream | null>(null);
   const [screenHasAudio, setScreenHasAudio] = useState(false);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, PeerStreams>>({});
   const [speaking, setSpeaking] = useState<Record<string, boolean>>({});
@@ -286,6 +293,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
         makingOffer: false,
         ignoreOffer: false,
         micSender: null,
+        camSender: null,
         screenVideoSender: null,
         screenAudioSender: null,
         pendingCandidates: [],
@@ -312,15 +320,18 @@ export function useVoice({ myId, peerIds, settings }: Params) {
         const stream = streams[0];
         if (!stream) return;
         setRemoteStreams((prev) => {
-          const mine: PeerStreams = { ...(prev[id] ?? {}) };
+          const antes = prev[id];
+          const mine: PeerStreams = { mic: antes?.mic, videos: [...(antes?.videos ?? [])] };
+          const jaTem = mine.videos.some((v) => v.id === stream.id);
+
           if (stream.getVideoTracks().length > 0) {
-            mine.screen = stream;
+            if (!jaTem) mine.videos.push(stream);
           } else if (!mine.mic || mine.mic.id === stream.id) {
             // primeira stream só de áudio = microfone
             mine.mic = stream;
-          } else {
-            // segunda stream de áudio = som da tela compartilhada
-            mine.screen = stream;
+          } else if (!jaTem) {
+            // som da tela chegando antes do vídeo dela
+            mine.videos.push(stream);
           }
           return { ...prev, [id]: mine };
         });
@@ -336,6 +347,12 @@ export function useVoice({ myId, peerIds, settings }: Params) {
         peer.micSender = pc.addTrack(outgoingMic.current, micStream.current);
       }
       // vídeo antes do áudio: assim o outro lado já classifica a stream como tela
+      const cam = camStream.current;
+      if (cam) {
+        const video = cam.getVideoTracks()[0];
+        if (video) peer.camSender = pc.addTrack(video, cam);
+      }
+
       const screen = screenStream.current;
       if (screen) {
         const video = screen.getVideoTracks()[0];
@@ -449,11 +466,59 @@ export function useVoice({ myId, peerIds, settings }: Params) {
       void peer.screenVideoSender?.replaceTrack(null).catch(() => {});
       void peer.screenAudioSender?.replaceTrack(null).catch(() => {});
     }
-    getSocket().emit('state', { sharing: false });
+    getSocket().emit('state', { sharing: false, screenStreamId: null });
   }, []);
+
+  const stopCam = useCallback(() => {
+    camStream.current?.getTracks().forEach((t) => t.stop());
+    camStream.current = null;
+    setLocalCam(null);
+    for (const peer of peers.current.values()) {
+      void peer.camSender?.replaceTrack(null).catch(() => {});
+    }
+    getSocket().emit('state', { camOn: false, camStreamId: null });
+  }, []);
+
+  const startCam = useCallback(async () => {
+    try {
+      const dev = cfg.current.videoDeviceId;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          ...(dev ? { deviceId: { exact: dev } } : {}),
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 },
+        },
+        audio: false,
+      });
+      camStream.current = stream;
+      setLocalCam(stream);
+
+      const video = stream.getVideoTracks()[0];
+      // rosto em movimento: fluidez importa mais que nitidez de detalhe
+      applyContentHint(video, 'motion');
+      // se o usuário desligar a câmera pelo sistema
+      video.addEventListener('ended', () => stopCam());
+
+      for (const peer of peers.current.values()) {
+        if (peer.camSender) void peer.camSender.replaceTrack(video).catch(() => {});
+        else peer.camSender = peer.pc.addTrack(video, stream);
+      }
+      // o id da stream é o que permite ao outro lado saber que isto é câmera
+      getSocket().emit('state', { camOn: true, camStreamId: stream.id });
+    } catch {
+      setError('Não consegui acessar a câmera. Libere a permissão no navegador e tente de novo.');
+    }
+  }, [stopCam]);
+
+  const toggleCam = useCallback(() => {
+    if (camStream.current) stopCam();
+    else void startCam();
+  }, [startCam, stopCam]);
 
   const leaveVoice = useCallback(() => {
     stopScreen();
+    stopCam();
     for (const id of [...peers.current.keys()]) dropPeer(id);
     micStream.current?.getTracks().forEach((t) => t.stop());
     mixer.current?.destroy();
@@ -468,7 +533,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     setDeafened(false);
     setInputLevel(0);
     getSocket().emit('voice:leave');
-  }, [myId, dropPeer, stopScreen, unwatchLevel]);
+  }, [myId, dropPeer, stopScreen, stopCam, unwatchLevel]);
 
   const setMicEnabled = useCallback((on: boolean) => {
     if (rawMic.current) rawMic.current.enabled = on;
@@ -522,7 +587,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
           else peer.screenAudioSender = peer.pc.addTrack(audio, stream);
         }
       }
-      socket.emit('state', { sharing: true });
+      socket.emit('state', { sharing: true, screenStreamId: stream.id });
 
       // capturar a tela pode derrubar o microfone no Windows: confere logo depois
       setTimeout(() => {
@@ -625,6 +690,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
       for (const peer of peers.current.values()) peer.pc.close();
       peers.current.clear();
       micStream.current?.getTracks().forEach((t) => t.stop());
+      camStream.current?.getTracks().forEach((t) => t.stop());
       screenStream.current?.getTracks().forEach((t) => t.stop());
       if (audioCtx.current && audioCtx.current.state !== 'closed') {
         void audioCtx.current.close().catch(() => {});
@@ -645,6 +711,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     connecting,
     error,
     localScreen,
+    localCam,
     screenHasAudio,
     remoteStreams,
     speaking,
@@ -655,6 +722,9 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     toggleDeafen,
     startScreen,
     stopScreen,
+    startCam,
+    stopCam,
+    toggleCam,
     applySettings,
     clearError: () => setError(null),
   };

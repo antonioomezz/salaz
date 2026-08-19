@@ -14,6 +14,10 @@ export type User = {
   muted: boolean;
   deafened: boolean;
   sharing: boolean;
+  camOn: boolean;
+  /** id da MediaStream da câmera, para o receptor distinguir de tela */
+  camStreamId: string | null;
+  screenStreamId: string | null;
 };
 
 /** 'bot' e 'card' são mensagens geradas pelo servidor, não por uma pessoa. */

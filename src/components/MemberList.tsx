@@ -5,7 +5,7 @@ import type { User } from '@/lib/types';
 import { getUserAudio, type UserAudio, type UserAudioMap } from '@/lib/userVolumes';
 import { Avatar } from './Avatar';
 import { UserVolume } from './UserVolume';
-import { MicOff, Screen, Speaker, SpeakerMuted } from './icons';
+import { Camera, MicOff, Screen, Speaker, SpeakerMuted } from './icons';
 
 type Props = {
   users: User[];
@@ -52,6 +52,7 @@ export function MemberList({ users, me, speaking, userAudio, onUserAudioChange }
                   ) : (
                     <span className="text-[10px] text-mute">{audio.volume}%</span>
                   ))}
+                {u.camOn && <Camera className="h-4 w-4 text-online" />}
                 {u.sharing && <Screen className="h-4 w-4 text-online" />}
                 {u.voiceChannel && !u.muted && <Speaker className="h-3.5 w-3.5 text-mute" />}
                 {u.voiceChannel && u.muted && <MicOff className="h-3.5 w-3.5 text-danger" />}

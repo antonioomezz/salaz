@@ -10,7 +10,7 @@ export type UserAudio = {
 
 export const DEFAULT_USER_AUDIO: UserAudio = { volume: 100, muted: false };
 
-const KEY = 'salaz:userAudio';
+const KEY = 'negoneycord:userAudio';
 
 /**
  * A chave é o NOME da pessoa, não o id do socket: o id muda a cada conexão,

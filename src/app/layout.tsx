@@ -2,8 +2,8 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Salaz',
-  description: 'Salas de voz, chat e compartilhamento de tela com os amigos.',
+  title: 'Negoneycord',
+  description: 'Salas de voz, câmera, chat e compartilhamento de tela com os amigos.',
 };
 
 export const viewport: Viewport = {

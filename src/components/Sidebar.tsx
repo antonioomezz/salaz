@@ -4,6 +4,8 @@ import { useState } from 'react';
 import type { Channel, User } from '@/lib/types';
 import { Avatar } from './Avatar';
 import {
+  Camera,
+  CameraOff,
   Copy,
   Gear,
   Hash,
@@ -31,6 +33,8 @@ type Voice = {
   startScreen: () => void;
   stopScreen: () => void;
   isSharing: boolean;
+  camOn: boolean;
+  toggleCam: () => void;
 };
 
 type Props = {
@@ -144,6 +148,7 @@ export function Sidebar({
                     {u.id === me?.id && ' (você)'}
                   </span>
                   <span className="ml-auto flex items-center gap-1 text-mute">
+                    {u.camOn && <Camera className="h-3.5 w-3.5 text-online" />}
                     {u.sharing && <Screen className="h-3.5 w-3.5 text-online" />}
                     {u.deafened ? (
                       <HeadphonesOff className="h-3.5 w-3.5 text-danger" />
@@ -169,6 +174,18 @@ export function Sidebar({
             <span className="block text-[11px] font-normal text-mute">Sala {roomId}</span>
           </div>
           <div className="flex gap-1.5">
+            <button
+              onClick={voice.toggleCam}
+              title={voice.camOn ? 'Desligar câmera' : 'Ligar câmera'}
+              className={`flex flex-1 items-center justify-center gap-1.5 rounded py-1.5 text-xs font-medium transition ${
+                voice.camOn
+                  ? 'bg-danger text-white hover:bg-danger-dark'
+                  : 'bg-ink-400 text-bright hover:bg-ink-300'
+              }`}
+            >
+              {voice.camOn ? <CameraOff className="h-4 w-4" /> : <Camera className="h-4 w-4" />}
+              Câmera
+            </button>
             <button
               onClick={voice.isSharing ? voice.stopScreen : voice.startScreen}
               className={`flex flex-1 items-center justify-center gap-1.5 rounded py-1.5 text-xs font-medium transition ${

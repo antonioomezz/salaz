@@ -3,7 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getSocket } from '@/lib/socket';
 import { useVoice } from '@/hooks/useVoice';
-import { saveName, useStoredName } from '@/lib/useStoredName';
+import { migrarChavesAntigas, saveName, useStoredName } from '@/lib/useStoredName';
+
+migrarChavesAntigas();
 import {
   DEFAULT_SETTINGS,
   saveSettings,
@@ -28,7 +30,7 @@ import { SettingsModal } from './SettingsModal';
 import { Sidebar } from './Sidebar';
 import { MusicPlayer } from './MusicPlayer';
 import { RemoteAudio } from './RemoteAudio';
-import { Stage, type Share } from './Stage';
+import { Stage, type Tile } from './Stage';
 import { Hash, Speaker } from './icons';
 
 export default function RoomClient({ roomId }: { roomId: string }) {
@@ -225,21 +227,34 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
   const me = users.find((u) => u.id === myId) ?? null;
   const activeChannel = channels.find((c) => c.id === active);
 
-  const shares: Share[] = users
-    .filter((u) => u.sharing && u.voiceChannel === myVoiceChannel && myVoiceChannel !== null)
-    .map((u) => {
-      const stream = u.id === myId ? voice.localScreen : voice.remoteStreams[u.id]?.screen;
-      if (!stream) return null;
+  /**
+   * Separa câmera de tela pelos ids que cada pessoa anuncia. O track remoto não
+   * diz de onde veio, então sem esses ids as duas se confundiriam.
+   */
+  const tiles: Tile[] = users
+    .filter((u) => u.voiceChannel === myVoiceChannel && myVoiceChannel !== null)
+    .flatMap((u) => {
+      const souEu = u.id === myId;
       const audio = getUserAudio(userAudio, u.name);
-      return {
-        user: u,
-        stream,
-        isLocal: u.id === myId,
-        userVolume: audio.volume,
-        userMuted: audio.muted,
-      };
-    })
-    .filter((s): s is Share => s !== null);
+      const videos = voice.remoteStreams[u.id]?.videos ?? [];
+      const base = { user: u, isLocal: souEu, userVolume: audio.volume, userMuted: audio.muted };
+      const out: Tile[] = [];
+
+      const tela = souEu
+        ? voice.localScreen
+        : (videos.find((v) => v.id === u.screenStreamId) ??
+          // reserva: só há um vídeo e a pessoa não está com câmera ligada
+          (u.sharing && !u.camOn ? videos[0] : undefined));
+      if (u.sharing && tela) out.push({ ...base, stream: tela, kind: 'screen' });
+
+      const cam = souEu
+        ? voice.localCam
+        : (videos.find((v) => v.id === u.camStreamId) ??
+          (u.camOn && !u.sharing ? videos[0] : undefined));
+      if (u.camOn && cam) out.push({ ...base, stream: cam, kind: 'cam' });
+
+      return out;
+    });
 
   const send = (text: string, image?: CompressedImage) => {
     // ";play ..." e amigos vão para o bot, não viram mensagem normal
@@ -293,6 +308,11 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
             playSfx('shareStart');
             void voice.startScreen();
           },
+          camOn: !!voice.localCam,
+          toggleCam: () => {
+            playSfx(voice.localCam ? 'shareStop' : 'shareStart');
+            voice.toggleCam();
+          },
           stopScreen: () => {
             playSfx('shareStop');
             voice.stopScreen();
@@ -343,7 +363,7 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
         />
 
         <Stage
-          shares={shares}
+          tiles={tiles}
           volume={settings.outputVolume}
           deafened={voice.deafened}
           outputDeviceId={settings.outputDeviceId}

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { DEFAULT_SETTINGS, type AudioSettings } from '@/lib/audioSettings';
 import { playSfx } from '@/lib/sounds';
-import { Headphones, Mic, Screen } from './icons';
+import { Camera, Headphones, Mic, Screen } from './icons';
 
 type Props = {
   settings: AudioSettings;
@@ -30,6 +30,7 @@ export function SettingsModal({
 }: Props) {
   const [inputs, setInputs] = useState<MediaDeviceInfo[]>([]);
   const [outputs, setOutputs] = useState<MediaDeviceInfo[]>([]);
+  const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
   const [semPermissao, setSemPermissao] = useState(false);
 
   useEffect(() => {
@@ -38,6 +39,7 @@ export function SettingsModal({
         const devices = await navigator.mediaDevices.enumerateDevices();
         setInputs(devices.filter((d) => d.kind === 'audioinput'));
         setOutputs(devices.filter((d) => d.kind === 'audiooutput'));
+        setCameras(devices.filter((d) => d.kind === 'videoinput'));
         // sem permissão concedida os nomes vêm vazios
         setSemPermissao(devices.some((d) => d.kind === 'audioinput' && !d.label));
       } catch {
@@ -184,6 +186,25 @@ export function SettingsModal({
             </div>
             <p className="mt-2 text-[11px] text-mute">
               Mudar qualquer um destes recaptura o microfone na hora, sem derrubar a chamada.
+            </p>
+          </Section>
+
+          {/* ------------------------------------------------ câmera */}
+          <Section icon={<Camera className="h-4 w-4" />} title="Câmera">
+            <select
+              value={settings.videoDeviceId}
+              onChange={(e) => set('videoDeviceId', e.target.value)}
+              className="w-full rounded bg-ink-900 px-3 py-2 text-sm text-bright outline-none"
+            >
+              <option value="">Padrão do sistema</option>
+              {cameras.map((d) => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label || `Câmera ${d.deviceId.slice(0, 6)}`}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-[11px] text-mute">
+              Vale na próxima vez que você ligar a câmera.
             </p>
           </Section>
 

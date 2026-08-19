@@ -117,7 +117,7 @@ async function oembed(endpoint, url) {
   try {
     const res = await fetch(`${endpoint}?url=${encodeURIComponent(url)}&format=json`, {
       signal: controller.signal,
-      headers: { 'user-agent': 'salaz/1.0' },
+      headers: { 'user-agent': 'negoneycord/1.0' },
     });
     if (!res.ok) return null;
     return await res.json();
@@ -156,7 +156,7 @@ function falarBot(io, room, channelId, text, card) {
     id: id(10),
     channelId: String(channelId),
     userId: 'bot',
-    name: 'Salaz',
+    name: 'Negoneycord',
     color: '#5865f2',
     text,
     ts: Date.now(),
@@ -209,6 +209,11 @@ app.prepare().then(() => {
         muted: false,
         deafened: false,
         sharing: false,
+        camOn: false,
+        // ids das MediaStreams: é como o outro lado sabe qual vídeo é câmera
+        // e qual é tela, já que o track remoto não carrega essa informação
+        camStreamId: null,
+        screenStreamId: null,
       };
       room.users.set(socket.id, user);
       socket.join(roomId);
@@ -416,17 +421,22 @@ app.prepare().then(() => {
       if (!room || !user) return;
       user.voiceChannel = null;
       user.sharing = false;
-      user.speaking = false;
+      user.camOn = false;
+      user.camStreamId = null;
+      user.screenStreamId = null;
       broadcastUsers(io, room);
     });
 
-    socket.on('state', ({ muted, deafened, sharing } = {}) => {
+    socket.on('state', ({ muted, deafened, sharing, camOn, camStreamId, screenStreamId } = {}) => {
       const room = roomId && rooms.get(roomId);
       const user = me();
       if (!room || !user) return;
       if (typeof muted === 'boolean') user.muted = muted;
       if (typeof deafened === 'boolean') user.deafened = deafened;
       if (typeof sharing === 'boolean') user.sharing = sharing;
+      if (typeof camOn === 'boolean') user.camOn = camOn;
+      if (camStreamId !== undefined) user.camStreamId = camStreamId || null;
+      if (screenStreamId !== undefined) user.screenStreamId = screenStreamId || null;
       broadcastUsers(io, room);
     });
 
@@ -446,6 +456,6 @@ app.prepare().then(() => {
   });
 
   server.listen(port, hostname, () => {
-    console.log(`\n  Salaz rodando em http://localhost:${port}  (${prod ? 'produção' : 'dev'})\n`);
+    console.log(`\n  Negoneycord rodando em http://localhost:${port}  (${prod ? 'produção' : 'dev'})\n`);
   });
 });

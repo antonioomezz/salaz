@@ -21,7 +21,7 @@ export function displayConstraints(preset: ScreenPreset): DisplayMediaStreamOpti
     },
     // trocar a aba compartilhada sem reiniciar a transmissão
     surfaceSwitching: 'include',
-    // evita o efeito espelho ao compartilhar a própria aba do Salaz
+    // evita o efeito espelho ao compartilhar a própria aba do Negoneycord
     selfBrowserSurface: 'exclude',
     systemAudio: 'include',
     monitorTypeSurfaces: 'include',

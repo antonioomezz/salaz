@@ -112,7 +112,7 @@ export function Chat({ channel, messages, onSend }: Props) {
                 {!grouped && (
                   <div className="flex items-baseline gap-2">
                     <span className="font-semibold" style={{ color: ehBot ? '#5865f2' : m.color }}>
-                      {ehBot ? 'Salaz' : m.name}
+                      {ehBot ? 'Negoneycord' : m.name}
                     </span>
                     {ehBot && (
                       <span className="rounded bg-blurple px-1 py-px text-[10px] font-bold text-white">

@@ -23,6 +23,8 @@ export type AudioSettings = {
   screenPreset: 'detail' | 'motion';
   /** 0-100: volume do arquivo de música tocado direto na chamada */
   musicVolume: number;
+  /** '' = câmera padrão do sistema */
+  videoDeviceId: string;
 };
 
 export const DEFAULT_SETTINGS: AudioSettings = {
@@ -37,9 +39,10 @@ export const DEFAULT_SETTINGS: AudioSettings = {
   sfxVolume: 60,
   screenPreset: 'detail',
   musicVolume: 70,
+  videoDeviceId: '',
 };
 
-const KEY = 'salaz:audio';
+const KEY = 'negoneycord:audio';
 
 export function loadSettings(): AudioSettings {
   if (typeof window === 'undefined') return DEFAULT_SETTINGS;

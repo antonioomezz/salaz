@@ -2,114 +2,153 @@
 
 import { useEffect, useRef } from 'react';
 import type { User } from '@/lib/types';
-import { Expand, Screen, Speaker, SpeakerMuted } from './icons';
+import { Camera, Expand, Screen, Speaker, SpeakerMuted } from './icons';
 
-export type Share = {
+export type Tile = {
   user: User;
   stream: MediaStream;
   isLocal: boolean;
+  /** tela compartilhada ou câmera do participante */
+  kind: 'screen' | 'cam';
   /** 0-200: volume individual configurado para esta pessoa */
   userVolume: number;
   userMuted: boolean;
 };
 
 type Props = {
-  shares: Share[];
+  tiles: Tile[];
   /** 0-100 */
   volume: number;
   deafened: boolean;
   outputDeviceId: string;
 };
 
-export function Stage({ shares, volume, deafened, outputDeviceId }: Props) {
-  if (!shares.length) return null;
+export function Stage({ tiles, volume, deafened, outputDeviceId }: Props) {
+  if (!tiles.length) return null;
+
+  // telas ocupam a linha de cima e mandam no layout; câmeras ficam menores
+  const telas = tiles.filter((t) => t.kind === 'screen');
+  const cameras = tiles.filter((t) => t.kind === 'cam');
 
   return (
-    <div className="shrink-0 border-b border-ink-900/60 bg-ink-900 p-3">
-      <div
-        className="grid gap-3"
-        style={{ gridTemplateColumns: `repeat(${Math.min(shares.length, 2)}, minmax(0, 1fr))` }}
-      >
-        {shares.map((share) => (
-          <Tile
-            key={share.user.id}
-            share={share}
-            solo={shares.length === 1}
-            volume={(volume / 100) * share.userVolume}
-            deafened={deafened}
-            outputDeviceId={outputDeviceId}
-          />
-        ))}
-      </div>
+    <div className="shrink-0 space-y-3 border-b border-ink-900/60 bg-ink-900 p-3">
+      {telas.length > 0 && (
+        <div
+          className="grid gap-3"
+          style={{ gridTemplateColumns: `repeat(${Math.min(telas.length, 2)}, minmax(0, 1fr))` }}
+        >
+          {telas.map((t) => (
+            <VideoTile
+              key={t.user.id + t.kind}
+              tile={t}
+              maxHeight={telas.length === 1 ? '44vh' : '28vh'}
+              volume={(volume / 100) * t.userVolume}
+              deafened={deafened}
+              outputDeviceId={outputDeviceId}
+            />
+          ))}
+        </div>
+      )}
+
+      {cameras.length > 0 && (
+        <div className="flex flex-wrap gap-3">
+          {cameras.map((t) => (
+            <VideoTile
+              key={t.user.id + t.kind}
+              tile={t}
+              maxHeight={telas.length > 0 ? '14vh' : '32vh'}
+              volume={(volume / 100) * t.userVolume}
+              deafened={deafened}
+              outputDeviceId={outputDeviceId}
+              compact
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function Tile({
-  share,
-  solo,
+function VideoTile({
+  tile,
+  maxHeight,
   volume,
   deafened,
   outputDeviceId,
+  compact = false,
 }: {
-  share: Share;
-  solo: boolean;
+  tile: Tile;
+  maxHeight: string;
   volume: number;
   deafened: boolean;
   outputDeviceId: string;
+  compact?: boolean;
 }) {
   const video = useRef<HTMLVideoElement>(null);
-  const temAudio = share.stream.getAudioTracks().length > 0;
+  const temAudio = tile.stream.getAudioTracks().length > 0;
+  const ehCamera = tile.kind === 'cam';
 
   useEffect(() => {
     const el = video.current;
-    if (el && el.srcObject !== share.stream) {
-      el.srcObject = share.stream;
+    if (el && el.srcObject !== tile.stream) {
+      el.srcObject = tile.stream;
       el.play().catch(() => {});
     }
-  }, [share.stream]);
+  }, [tile.stream]);
 
-  // o próprio vídeo carrega o som da tela; a nossa própria transmissão fica
-  // sempre muda para não criar realimentação com o alto-falante
   useEffect(() => {
     const el = video.current;
     if (!el) return;
-    // o som da própria transmissão fica sempre mudo para não realimentar
-    el.muted = share.isLocal || deafened || share.userMuted;
-    // o elemento aceita no máximo 1.0; acima disso seria preciso WebAudio
+    // a própria imagem fica sempre muda para não realimentar o alto-falante
+    el.muted = tile.isLocal || deafened || tile.userMuted;
     el.volume = Math.max(0, Math.min(1, volume / 100));
-  }, [share.isLocal, share.userMuted, deafened, volume]);
+  }, [tile.isLocal, tile.userMuted, deafened, volume]);
 
   useEffect(() => {
-    const el = video.current as (HTMLVideoElement & { setSinkId?: (id: string) => Promise<void> }) | null;
-    if (!el?.setSinkId || share.isLocal) return;
+    const el = video.current as
+      | (HTMLVideoElement & { setSinkId?: (id: string) => Promise<void> })
+      | null;
+    if (!el?.setSinkId || tile.isLocal) return;
     void el.setSinkId(outputDeviceId).catch(() => {});
-  }, [outputDeviceId, share.isLocal]);
+  }, [outputDeviceId, tile.isLocal]);
 
   return (
-    <div className="group relative overflow-hidden rounded-lg bg-black ring-1 ring-ink-400">
+    <div
+      className={`group relative overflow-hidden rounded-lg bg-black ring-1 ring-ink-400 ${
+        compact ? 'w-56 shrink-0' : ''
+      }`}
+    >
       <video
         ref={video}
         autoPlay
         playsInline
         className="w-full bg-black object-contain"
-        style={{ maxHeight: solo ? '46vh' : '30vh' }}
+        style={{
+          maxHeight,
+          // espelhar a própria câmera é o que todo mundo espera
+          transform: ehCamera && tile.isLocal ? 'scaleX(-1)' : undefined,
+        }}
       />
 
-      <div className="absolute bottom-2 left-2 flex items-center gap-1.5 rounded bg-black/70 px-2 py-1 text-xs text-white">
-        <Screen className="h-3.5 w-3.5 text-online" />
-        {share.isLocal ? 'Você está transmitindo' : `${share.user.name} está transmitindo`}
-        {temAudio ? (
-          <Speaker className="h-3.5 w-3.5 text-online" />
+      <div className="absolute bottom-1.5 left-1.5 flex items-center gap-1.5 rounded bg-black/70 px-2 py-1 text-[11px] text-white">
+        {ehCamera ? (
+          <Camera className="h-3.5 w-3.5 text-online" />
         ) : (
-          <SpeakerMuted className="h-3.5 w-3.5 text-mute" />
+          <Screen className="h-3.5 w-3.5 text-online" />
         )}
+        {tile.isLocal ? 'Você' : tile.user.name}
+        {!ehCamera &&
+          (temAudio ? (
+            <Speaker className="h-3.5 w-3.5 text-online" />
+          ) : (
+            <SpeakerMuted className="h-3.5 w-3.5 text-mute" />
+          ))}
       </div>
 
       <button
         onClick={() => video.current?.requestFullscreen?.()}
         title="Tela cheia"
-        className="absolute top-2 right-2 rounded bg-black/70 p-1.5 text-white opacity-0 transition group-hover:opacity-100"
+        className="absolute top-1.5 right-1.5 rounded bg-black/70 p-1.5 text-white opacity-0 transition group-hover:opacity-100"
       >
         <Expand className="h-4 w-4" />
       </button>
