@@ -8,6 +8,16 @@ const crypto = require('crypto');
 const next = require('next');
 const { Server } = require('socket.io');
 
+// Carrega .env.local antes de qualquer coisa ler process.env — é assim que a
+// YOUTUBE_API_KEY funciona ao rodar na sua máquina. Em produção (Render) as
+// variáveis já vêm do ambiente, então isto só facilita o uso local.
+// @next/env acompanha o next; se um dia não vier, seguimos sem quebrar.
+try {
+  require('@next/env').loadEnvConfig(process.cwd(), !prod);
+} catch {
+  /* sem .env.local: usa o que já estiver em process.env */
+}
+
 const port = parseInt(process.env.PORT || '3800', 10);
 const hostname = process.env.HOST || '0.0.0.0';
 
