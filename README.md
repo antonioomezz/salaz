@@ -86,8 +86,14 @@ mudarem o layout da página.
 
 Para deixar estável, crie uma chave gratuita da **YouTube Data API v3** e defina a variável
 de ambiente `YOUTUBE_API_KEY` (no Render: Environment → Add Environment Variable). Com ela
-o bot passa a usar a API oficial e ignora o caminho frágil. A cota gratuita dá cerca de
-100 buscas por dia.
+o bot passa a usar a API oficial. A cota gratuita dá cerca de 100 buscas por dia.
+
+**A cota não gera cobrança.** É um teto rígido: quando acaba, a API só responde com erro até
+resetar (meia-noite no horário do Pacífico). Essa API não tem faixa paga, então não há como
+gastar dinheiro nela. Não é preciso ativar faturamento no projeto do Google Cloud.
+
+Se a cota estourar, o bot **não para**: ele volta sozinho para a busca pela página. Você só
+perde a estabilidade até o dia seguinte.
 
 O servidor guarda a posição da música e sincroniza todo mundo: o player de cada um se corrige
 sozinho quando a defasagem passa de 1,5s. Quem entra depois já cai no ponto certo.

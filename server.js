@@ -136,6 +136,36 @@ async function oembed(endpoint, url) {
  * o primeiro vídeo — funciona hoje, mas é frágil: qualquer mudança de layout
  * do YouTube quebra, e não é um uso previsto por eles.
  */
+async function buscaPelaApi(termo, chave, signal) {
+  const url =
+    'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1' +
+    `&q=${encodeURIComponent(termo)}&key=${chave}`;
+  const res = await fetch(url, { signal });
+  if (!res.ok) {
+    // 403 aqui costuma ser cota do dia esgotada — não é erro de programação
+    console.warn(`busca pela API do YouTube falhou (HTTP ${res.status}); tentando pela página`);
+    return null;
+  }
+  const json = await res.json();
+  return json.items?.[0]?.id?.videoId ?? null;
+}
+
+async function buscaPelaPagina(termo, signal) {
+  const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(termo)}`;
+  const res = await fetch(url, {
+    signal,
+    headers: {
+      'user-agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
+      'accept-language': 'pt-BR,pt;q=0.9',
+    },
+  });
+  if (!res.ok) return null;
+  const html = await res.text();
+  const m = html.match(/"videoId":"([A-Za-z0-9_-]{11})"/);
+  return m ? m[1] : null;
+}
+
 async function buscarNoYoutube(termo) {
   const chave = process.env.YOUTUBE_API_KEY;
   const controller = new AbortController();
@@ -143,29 +173,11 @@ async function buscarNoYoutube(termo) {
 
   try {
     if (chave) {
-      const url =
-        'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1' +
-        `&q=${encodeURIComponent(termo)}&key=${chave}`;
-      const res = await fetch(url, { signal: controller.signal });
-      if (!res.ok) return null;
-      const json = await res.json();
-      const item = json.items?.[0];
-      return item?.id?.videoId ?? null;
+      const porApi = await buscaPelaApi(termo, chave, controller.signal).catch(() => null);
+      if (porApi) return porApi;
+      // cota estourada ou API fora do ar: cai para a página em vez de desistir
     }
-
-    const url = `https://www.youtube.com/results?search_query=${encodeURIComponent(termo)}`;
-    const res = await fetch(url, {
-      signal: controller.signal,
-      headers: {
-        'user-agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36',
-        'accept-language': 'pt-BR,pt;q=0.9',
-      },
-    });
-    if (!res.ok) return null;
-    const html = await res.text();
-    const m = html.match(/"videoId":"([A-Za-z0-9_-]{11})"/);
-    return m ? m[1] : null;
+    return await buscaPelaPagina(termo, controller.signal);
   } catch {
     return null;
   } finally {
