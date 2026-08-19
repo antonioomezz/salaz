@@ -231,9 +231,27 @@ export function SettingsModal({
                 </button>
               ))}
             </div>
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-[11px] text-mute">Taxa de quadros</span>
+              {([30, 60] as const).map((f) => (
+                <button
+                  key={f}
+                  onClick={() => set('screenFps', f)}
+                  className={`rounded px-3 py-1 text-xs font-medium transition ${
+                    settings.screenFps === f
+                      ? 'bg-blurple text-white'
+                      : 'bg-ink-400 text-bright hover:bg-ink-300'
+                  }`}
+                >
+                  {f} fps
+                </button>
+              ))}
+            </div>
             <p className="mt-2 text-[11px] leading-tight text-mute">
-              Se a live estiver travada, use <b>Vídeo e jogo</b>. A troca de banda vale na hora;
-              a taxa de captura só muda quando você recomeçar a transmissão.
+              A taxa vale a partir da <b>próxima</b> transmissão — pare e recomece para aplicar.
+              O quadro da sua tela mostra quanto a captura entrega e quanto sai de fato; se a
+              captura ficar em 30, compartilhe uma <b>aba do Chrome</b> em vez da tela inteira,
+              que costuma render bem mais quadros.
             </p>
           </Section>
 

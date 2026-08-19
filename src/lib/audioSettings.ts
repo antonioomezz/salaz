@@ -21,6 +21,8 @@ export type AudioSettings = {
    * (vídeo, jogo). Vira contentHint + bitrate + framerate na transmissão.
    */
   screenPreset: 'detail' | 'motion';
+  /** taxa de quadros pedida na captura de tela */
+  screenFps: 30 | 60;
   /** 0-100: volume do arquivo de música tocado direto na chamada */
   musicVolume: number;
   /** '' = câmera padrão do sistema */
@@ -38,6 +40,7 @@ export const DEFAULT_SETTINGS: AudioSettings = {
   sfxEnabled: true,
   sfxVolume: 60,
   screenPreset: 'detail',
+  screenFps: 60,
   musicVolume: 70,
   videoDeviceId: '',
 };

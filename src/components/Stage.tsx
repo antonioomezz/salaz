@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import type { User } from '@/lib/types';
+import type { ScreenStats } from '@/hooks/useVoice';
 import { Camera, Expand, Screen, Speaker, SpeakerMuted } from './icons';
 
 export type Tile = {
@@ -18,7 +19,7 @@ export type Tile = {
 type Props = {
   tiles: Tile[];
   /** medição da própria transmissão de tela, se houver */
-  screenStats?: { width: number; height: number; fps: number; kbps: number } | null;
+  screenStats?: ScreenStats | null;
   /** 0-100 */
   volume: number;
   deafened: boolean;
@@ -87,7 +88,7 @@ function VideoTile({
   deafened: boolean;
   outputDeviceId: string;
   compact?: boolean;
-  stats?: { width: number; height: number; fps: number; kbps: number } | null;
+  stats?: ScreenStats | null;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const temAudio = tile.stream.getAudioTracks().length > 0;
@@ -159,8 +160,13 @@ function VideoTile({
             {stats.width}×{stats.height}
           </span>
           <span className="text-mute"> · </span>
-          <span className={stats.fps >= 50 ? 'text-online' : 'text-amber-400'}>{stats.fps} fps</span>
-          <span className="text-mute"> · {(stats.kbps / 1000).toFixed(1)} Mbps</span>
+          <span className="text-mute"> · captura </span>
+          <span className={stats.captureFps >= 50 ? 'text-online' : 'text-amber-400'}>
+            {stats.captureFps}
+          </span>
+          <span className="text-mute"> · envia </span>
+          <span className={stats.fps >= 50 ? 'text-online' : 'text-amber-400'}>{stats.fps}</span>
+          <span className="text-mute"> fps · {(stats.kbps / 1000).toFixed(1)} Mbps</span>
         </div>
       )}
 

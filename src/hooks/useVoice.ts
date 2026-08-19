@@ -8,6 +8,7 @@ import { createMixer, type Mixer } from '@/lib/mixer';
 import {
   applyContentHint,
   displayConstraints,
+  pushFrameRate,
   preferScreenCodecs,
   tuneScreenSender,
 } from '@/lib/screenQuality';
@@ -33,7 +34,15 @@ type Peer = {
 export type PeerStreams = { mic?: MediaStream; videos: MediaStream[] };
 
 /** o que está realmente saindo na transmissão de tela, medido do encoder */
-export type ScreenStats = { width: number; height: number; fps: number; kbps: number };
+export type ScreenStats = {
+  width: number;
+  height: number;
+  /** quadros por segundo que estão SAINDO (depois do encoder) */
+  fps: number;
+  /** quadros por segundo que a CAPTURA está entregando */
+  captureFps: number;
+  kbps: number;
+};
 
 type Params = {
   myId: string | null;
@@ -177,7 +186,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     const preset = cfg.current.screenPreset;
     const transceiver = pc.getTransceivers().find((t) => t.sender === sender);
     if (transceiver) preferScreenCodecs(transceiver, preset);
-    void tuneScreenSender(sender, preset, peers.current.size);
+    void tuneScreenSender(sender, preset, peers.current.size, cfg.current.screenFps);
   }, []);
 
   /**
@@ -188,7 +197,9 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     const preset = cfg.current.screenPreset;
     const quantos = peers.current.size;
     for (const peer of peers.current.values()) {
-      if (peer.screenVideoSender) void tuneScreenSender(peer.screenVideoSender, preset, quantos);
+      if (peer.screenVideoSender) {
+        void tuneScreenSender(peer.screenVideoSender, preset, quantos, cfg.current.screenFps);
+      }
     }
   }, []);
 
@@ -216,7 +227,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
           .getTransceivers()
           .find((t) => t.sender === peer.screenVideoSender);
         if (transceiver) preferScreenCodecs(transceiver, preset);
-        void tuneScreenSender(peer.screenVideoSender, preset, quantos);
+        void tuneScreenSender(peer.screenVideoSender, preset, quantos, cfg.current.screenFps);
       } catch {
         /* se falhar, a transmissão segue no codec anterior */
       }
@@ -335,10 +346,12 @@ export function useVoice({ myId, peerIds, settings }: Params) {
           }
           anterior = { bytes, frames, ts };
 
+          const capturado = screenStream.current?.getVideoTracks()[0]?.getSettings().frameRate ?? 0;
           setScreenStats({
             width: s.frameWidth ?? 0,
             height: s.frameHeight ?? 0,
             fps: Math.round(fps),
+            captureFps: Math.round(capturado),
             kbps,
           });
         });
@@ -656,14 +669,19 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     const socket = getSocket();
     try {
       const preset = cfg.current.screenPreset;
-      const stream = await navigator.mediaDevices.getDisplayMedia(displayConstraints(preset));
+      const fps = cfg.current.screenFps;
+      const stream = await navigator.mediaDevices.getDisplayMedia(displayConstraints(preset, fps));
       screenStream.current = stream;
       setLocalScreen(stream);
 
       const video = stream.getVideoTracks()[0];
       const audio = stream.getAudioTracks()[0];
       setScreenHasAudio(!!audio);
-      if (video) applyContentHint(video, preset);
+      if (video) {
+        applyContentHint(video, preset);
+        // alguns capturadores só sobem a taxa se ela for reaplicada
+        void pushFrameRate(video, fps);
+      }
 
       // botão nativo "parar compartilhamento" do navegador
       video?.addEventListener('ended', () => stopScreen());

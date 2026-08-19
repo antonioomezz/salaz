@@ -6,15 +6,14 @@ export type ScreenPreset = 'detail' | 'motion';
  * Constraints de captura. Os campos além de video/audio são recentes e
  * ignorados em silêncio por navegadores que não os conhecem.
  */
-export function displayConstraints(preset: ScreenPreset): DisplayMediaStreamOptions {
-  const motion = preset === 'motion';
+export function displayConstraints(preset: ScreenPreset, fps: number): DisplayMediaStreamOptions {
   return {
     video: {
       width: { ideal: 1920 },
       height: { ideal: 1080 },
-      // pedir o ideal alto importa: o navegador captura no que for pedido, e
-      // não dá para recuperar quadros que nunca foram capturados
-      frameRate: { ideal: motion ? 60 : 30, max: motion ? 60 : 30 },
+      // sem 'max': limitar por cima faz alguns capturadores já entregarem
+      // menos. Quadro não capturado não se recupera depois.
+      frameRate: { ideal: fps },
     },
     audio: {
       echoCancellation: false,
@@ -94,7 +93,8 @@ const BITRATE_MINIMO: Record<ScreenPreset, number> = {
 export async function tuneScreenSender(
   sender: RTCRtpSender,
   preset: ScreenPreset,
-  peerCount = 1
+  peerCount = 1,
+  fps = 60
 ) {
   try {
     const motion = preset === 'motion';
@@ -106,7 +106,7 @@ export async function tuneScreenSender(
       Math.round(BITRATE_BASE[preset] / Math.max(1, peerCount))
     );
     params.encodings[0].maxBitrate = teto;
-    params.encodings[0].maxFramerate = motion ? 60 : 30;
+    params.encodings[0].maxFramerate = fps;
     // não deixa o navegador reduzir a resolução por conta própria
     params.encodings[0].scaleResolutionDownBy = 1;
 
@@ -126,5 +126,17 @@ export function applyContentHint(track: MediaStreamTrack, preset: ScreenPreset) 
       preset === 'motion' ? 'motion' : 'detail';
   } catch {
     /* propriedade opcional */
+  }
+}
+
+/**
+ * Reforça a taxa de quadros na track já capturada. Alguns capturadores começam
+ * abaixo do pedido e sobem quando a restrição é reaplicada.
+ */
+export async function pushFrameRate(track: MediaStreamTrack, fps: number) {
+  try {
+    await track.applyConstraints({ frameRate: { ideal: fps } });
+  } catch {
+    /* o capturador não aceitou; segue no que conseguir */
   }
 }
