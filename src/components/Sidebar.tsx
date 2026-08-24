@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import type { Channel, User } from '@/lib/types';
 import { Avatar } from './Avatar';
+import { UserVolume } from './UserVolume';
+import { getUserAudio, type UserAudio, type UserAudioMap } from '@/lib/userVolumes';
 import {
   Camera,
   CameraOff,
@@ -17,6 +19,7 @@ import {
   Plus,
   Screen,
   Speaker,
+  SpeakerMuted,
 } from './icons';
 
 type Voice = {
@@ -47,6 +50,8 @@ type Props = {
   onSelectChannel: (id: string) => void;
   onCreateChannel: (name: string, type: 'text' | 'voice') => void;
   onOpenSettings: () => void;
+  userAudio: UserAudioMap;
+  onUserAudioChange: (name: string, patch: Partial<UserAudio>) => void;
   voice: Voice;
 };
 
@@ -60,9 +65,12 @@ export function Sidebar({
   onSelectChannel,
   onCreateChannel,
   onOpenSettings,
+  userAudio,
+  onUserAudioChange,
   voice,
 }: Props) {
   const [copied, setCopied] = useState(false);
+  const [volumeAberto, setVolumeAberto] = useState<string | null>(null);
   const [creating, setCreating] = useState<null | 'text' | 'voice'>(null);
   const [draft, setDraft] = useState('');
 
@@ -140,24 +148,51 @@ export function Sidebar({
                 )}
               </button>
 
-              {inside.map((u) => (
-                <div key={u.id} className="flex items-center gap-2 py-1 pr-2 pl-6 text-sm">
-                  <Avatar user={u} size={22} speaking={!!speaking[u.id]} />
-                  <span className={`truncate ${speaking[u.id] ? 'text-white' : 'text-mute'}`}>
-                    {u.name}
-                    {u.id === me?.id && ' (você)'}
-                  </span>
-                  <span className="ml-auto flex items-center gap-1 text-mute">
-                    {u.camOn && <Camera className="h-3.5 w-3.5 text-online" />}
-                    {u.sharing && <Screen className="h-3.5 w-3.5 text-online" />}
-                    {u.deafened ? (
-                      <HeadphonesOff className="h-3.5 w-3.5 text-danger" />
-                    ) : (
-                      u.muted && <MicOff className="h-3.5 w-3.5 text-danger" />
+              {inside.map((u) => {
+                const souEu = u.id === me?.id;
+                const audio = getUserAudio(userAudio, u.name);
+                return (
+                  <div key={u.id} className="relative">
+                    <button
+                      onClick={() => !souEu && setVolumeAberto(volumeAberto === u.id ? null : u.id)}
+                      onContextMenu={(e) => {
+                        if (souEu) return;
+                        e.preventDefault();
+                        setVolumeAberto(u.id);
+                      }}
+                      disabled={souEu}
+                      title={souEu ? undefined : 'Clique (ou botão direito) para ajustar o volume'}
+                      className="flex w-full items-center gap-2 rounded py-1 pr-2 pl-6 text-left text-sm transition enabled:hover:bg-ink-400/40"
+                    >
+                      <Avatar user={u} size={22} speaking={!!speaking[u.id]} />
+                      <span className={`truncate ${speaking[u.id] ? 'text-white' : 'text-mute'}`}>
+                        {u.name}
+                        {souEu && ' (você)'}
+                      </span>
+                      <span className="ml-auto flex items-center gap-1 text-mute">
+                        {!souEu && audio.muted && <SpeakerMuted className="h-3.5 w-3.5 text-danger" />}
+                        {u.camOn && <Camera className="h-3.5 w-3.5 text-online" />}
+                        {u.sharing && <Screen className="h-3.5 w-3.5 text-online" />}
+                        {u.deafened ? (
+                          <HeadphonesOff className="h-3.5 w-3.5 text-danger" />
+                        ) : (
+                          u.muted && <MicOff className="h-3.5 w-3.5 text-danger" />
+                        )}
+                      </span>
+                    </button>
+
+                    {volumeAberto === u.id && (
+                      <UserVolume
+                        name={u.name}
+                        audio={audio}
+                        sharing={u.sharing}
+                        onChange={(patch) => onUserAudioChange(u.name, patch)}
+                        onClose={() => setVolumeAberto(null)}
+                      />
                     )}
-                  </span>
-                </div>
-              ))}
+                  </div>
+                );
+              })}
             </div>
           );
         })}

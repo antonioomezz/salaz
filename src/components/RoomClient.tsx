@@ -254,7 +254,11 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
         : (videos.find((v) => v.id === u.screenStreamId) ??
           // reserva: só há um vídeo e a pessoa não está com câmera ligada
           (u.sharing && !u.camOn ? videos[0] : undefined));
-      if (u.sharing && tela) out.push({ ...base, stream: tela, kind: 'screen' });
+      // a live tem volume próprio: quem transmite a tela inteira com som acaba
+      // repetindo o áudio da chamada, e isso precisa ser abaixável sozinho
+      if (u.sharing && tela) {
+        out.push({ ...base, stream: tela, kind: 'screen', userVolume: audio.screenVolume });
+      }
 
       const cam = souEu
         ? voice.localCam
@@ -290,6 +294,8 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
         onSelectChannel={setActive}
         onCreateChannel={createChannel}
         onOpenSettings={() => setSettingsOpen(true)}
+        userAudio={userAudio}
+        onUserAudioChange={alterarVolumeDe}
         voice={{
           inVoice: voice.inVoice,
           voiceChannel: voice.voiceChannel,
@@ -377,6 +383,10 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
           volume={settings.outputVolume}
           deafened={voice.deafened}
           outputDeviceId={settings.outputDeviceId}
+          onToggleScreenMute={(userName) => {
+            const atual = getUserAudio(userAudio, userName);
+            alterarVolumeDe(userName, { screenVolume: atual.screenVolume === 0 ? 100 : 0 });
+          }}
         />
 
         <Chat channel={activeChannel} messages={messages[active] ?? []} onSend={send} />

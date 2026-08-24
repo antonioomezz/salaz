@@ -56,11 +56,23 @@ no máximo 25 imagens; passando disso, as mais antigas são liberadas.
 
 ### Volume de cada pessoa
 
-Clique numa pessoa na lista da direita para abrir o controle dela: slider de **0 a 200%** e
-botão de silenciar só aquela pessoa. Fica salvo por nome, então vale nas próximas vezes.
+Clique — ou clique com o **botão direito** — numa pessoa, na lista da direita ou dentro do
+canal de voz. Abre um controle com dois faders independentes de **0 a 200%**:
 
-Até 100% o ajuste é direto no elemento de áudio. Acima disso entra amplificação por WebAudio
+- **Voz** — o microfone da pessoa
+- **Live** — o áudio da transmissão de tela dela, só aparece se ela estiver transmitindo
+
+Fica salvo por nome, então vale nas próximas vezes.
+
+Até 100% o ajuste é direto no elemento de mídia. Acima disso entra amplificação por WebAudio
 — pode distorcer, e nesse modo a escolha de dispositivo de saída não se aplica.
+
+> **Ouvindo a chamada duplicada durante uma live?** Quem compartilha a **tela inteira com som
+> do sistema** acaba recapturando o áudio do próprio Negoneycord, e as vozes voltam pela
+> transmissão. Os dois faders são separados justamente por isso: zere o de **Live** e você
+> continua ouvindo as vozes normalmente. Há também um botão de silenciar a live no canto do
+> quadro. Do lado de quem transmite, o jeito de evitar é compartilhar uma **aba** em vez da
+> tela inteira — aí só o som daquela aba é capturado.
 
 ### Bot de música
 

@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import type { User } from '@/lib/types';
 import type { ScreenStats } from '@/hooks/useVoice';
+import { useMediaVolume } from '@/hooks/useMediaVolume';
 import { Camera, Expand, Screen, Speaker, SpeakerMuted } from './icons';
 
 export type Tile = {
@@ -11,7 +12,7 @@ export type Tile = {
   isLocal: boolean;
   /** tela compartilhada ou câmera do participante */
   kind: 'screen' | 'cam';
-  /** 0-200: volume individual configurado para esta pessoa */
+  /** 0-200: volume desta mídia especificamente (voz ou live) */
   userVolume: number;
   userMuted: boolean;
 };
@@ -20,13 +21,22 @@ type Props = {
   tiles: Tile[];
   /** medição da própria transmissão de tela, se houver */
   screenStats?: ScreenStats | null;
-  /** 0-100 */
+  /** 0-100, volume geral de saída */
   volume: number;
   deafened: boolean;
   outputDeviceId: string;
+  /** silencia rapidamente o áudio da live de alguém, direto do quadro */
+  onToggleScreenMute: (userName: string) => void;
 };
 
-export function Stage({ tiles, screenStats, volume, deafened, outputDeviceId }: Props) {
+export function Stage({
+  tiles,
+  screenStats,
+  volume,
+  deafened,
+  outputDeviceId,
+  onToggleScreenMute,
+}: Props) {
   if (!tiles.length) return null;
 
   // telas ocupam a linha de cima e mandam no layout; câmeras ficam menores
@@ -49,6 +59,7 @@ export function Stage({ tiles, screenStats, volume, deafened, outputDeviceId }: 
               deafened={deafened}
               outputDeviceId={outputDeviceId}
               stats={t.isLocal ? screenStats : null}
+              onToggleMute={() => onToggleScreenMute(t.user.name)}
             />
           ))}
         </div>
@@ -81,6 +92,7 @@ function VideoTile({
   outputDeviceId,
   compact = false,
   stats = null,
+  onToggleMute,
 }: {
   tile: Tile;
   maxHeight: string;
@@ -89,6 +101,7 @@ function VideoTile({
   outputDeviceId: string;
   compact?: boolean;
   stats?: ScreenStats | null;
+  onToggleMute?: () => void;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const temAudio = tile.stream.getAudioTracks().length > 0;
@@ -102,13 +115,12 @@ function VideoTile({
     }
   }, [tile.stream]);
 
-  useEffect(() => {
-    const el = video.current;
-    if (!el) return;
-    // a própria imagem fica sempre muda para não realimentar o alto-falante
-    el.muted = tile.isLocal || deafened || tile.userMuted;
-    el.volume = Math.max(0, Math.min(1, volume / 100));
-  }, [tile.isLocal, tile.userMuted, deafened, volume]);
+  // a própria imagem nunca toca, para não realimentar o alto-falante
+  useMediaVolume(video, tile.stream, {
+    volume,
+    muted: deafened || tile.userMuted,
+    isLocal: tile.isLocal,
+  });
 
   useEffect(() => {
     const el = video.current as
@@ -169,13 +181,32 @@ function VideoTile({
         </div>
       )}
 
-      <button
-        onClick={() => video.current?.requestFullscreen?.()}
-        title="Tela cheia"
-        className="absolute top-1.5 right-1.5 rounded bg-black/70 p-1.5 text-white opacity-0 transition group-hover:opacity-100"
-      >
-        <Expand className="h-4 w-4" />
-      </button>
+      <div className="absolute top-1.5 right-1.5 flex gap-1 opacity-0 transition group-hover:opacity-100">
+        {!ehCamera && !tile.isLocal && temAudio && onToggleMute && (
+          <button
+            onClick={onToggleMute}
+            title={
+              tile.userMuted || volume === 0
+                ? 'Ouvir o som da live'
+                : 'Silenciar só o som da live (as vozes continuam)'
+            }
+            className="rounded bg-black/70 p-1.5 text-white transition hover:bg-black"
+          >
+            {tile.userMuted || volume === 0 ? (
+              <SpeakerMuted className="h-4 w-4 text-danger" />
+            ) : (
+              <Speaker className="h-4 w-4" />
+            )}
+          </button>
+        )}
+        <button
+          onClick={() => video.current?.requestFullscreen?.()}
+          title="Tela cheia"
+          className="rounded bg-black/70 p-1.5 text-white transition hover:bg-black"
+        >
+          <Expand className="h-4 w-4" />
+        </button>
+      </div>
     </div>
   );
 }

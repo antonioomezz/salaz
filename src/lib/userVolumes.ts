@@ -3,12 +3,18 @@
 import { useMemo, useSyncExternalStore } from 'react';
 
 export type UserAudio = {
-  /** 0-200. Acima de 100 exige ganho por WebAudio. */
+  /** voz da pessoa (microfone), 0-200. Acima de 100 exige ganho por WebAudio. */
   volume: number;
+  /**
+   * Áudio da transmissão de tela dela, 0-200 — separado da voz de propósito:
+   * quem compartilha a tela inteira com som do sistema acaba recapturando a
+   * própria chamada, e você precisa poder abaixar a live sem perder as vozes.
+   */
+  screenVolume: number;
   muted: boolean;
 };
 
-export const DEFAULT_USER_AUDIO: UserAudio = { volume: 100, muted: false };
+export const DEFAULT_USER_AUDIO: UserAudio = { volume: 100, screenVolume: 100, muted: false };
 
 const KEY = 'negoneycord:userAudio';
 
@@ -21,7 +27,9 @@ const normalize = (name: string) => name.trim().toLowerCase();
 export type UserAudioMap = Record<string, UserAudio>;
 
 export function getUserAudio(map: UserAudioMap, name: string): UserAudio {
-  return map[normalize(name)] ?? DEFAULT_USER_AUDIO;
+  const salvo = map[normalize(name)];
+  // o formato antigo não tinha screenVolume; o spread cobre esse caso
+  return salvo ? { ...DEFAULT_USER_AUDIO, ...salvo } : DEFAULT_USER_AUDIO;
 }
 
 export function setUserAudio(map: UserAudioMap, name: string, patch: Partial<UserAudio>): UserAudioMap {

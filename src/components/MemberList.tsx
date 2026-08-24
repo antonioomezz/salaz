@@ -65,8 +65,14 @@ export function MemberList({
           <div key={u.id} className="relative">
             <button
               onClick={() => !souEu && setAberto(aberto === u.id ? null : u.id)}
+              onContextMenu={(e) => {
+                if (souEu) return;
+                // sem isto o menu do navegador abre por cima do popover
+                e.preventDefault();
+                setAberto(u.id);
+              }}
               disabled={souEu}
-              title={souEu ? undefined : 'Ajustar o volume desta pessoa'}
+              title={souEu ? undefined : 'Clique (ou botão direito) para ajustar o volume'}
               className="flex w-full items-center gap-2.5 rounded px-2 py-1.5 text-left transition enabled:hover:bg-ink-400/50"
             >
               <div className="relative">
@@ -95,6 +101,7 @@ export function MemberList({
               <UserVolume
                 name={u.name}
                 audio={audio}
+                sharing={u.sharing}
                 onChange={(patch) => onUserAudioChange(u.name, patch)}
                 onClose={() => setAberto(null)}
               />
