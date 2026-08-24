@@ -45,6 +45,17 @@ npm start
 
 O botão **+** ao lado de "Canais de texto" e "Canais de voz" cria canais novos na hora.
 
+### Versão
+
+No canto inferior direito fica o número da versão em execução. Clicando nele abre o histórico
+do que mudou em cada versão.
+
+Serve também como conferência rápida de deploy: se o número não mudou depois de publicar,
+o navegador ainda está servindo os arquivos antigos — recarregue com `Ctrl + Shift + R`.
+
+Ao mudar algo, adicione a versão nova no topo de `src/lib/changelog.ts`. O número exibido é
+sempre a primeira entrada da lista.
+
 ### Imagens no chat
 
 Cole com **Ctrl+V**, arraste para a janela ou use o clipe. A imagem é reduzida e

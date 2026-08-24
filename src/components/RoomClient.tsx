@@ -32,6 +32,7 @@ import { Sidebar } from './Sidebar';
 import { MusicPlayer } from './MusicPlayer';
 import { RemoteAudio } from './RemoteAudio';
 import { Stage, type Tile } from './Stage';
+import { VersionBadge } from './VersionBadge';
 import { Hash, Speaker } from './icons';
 
 export default function RoomClient({ roomId }: { roomId: string }) {
@@ -416,6 +417,8 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
           />
         );
       })}
+
+      <VersionBadge />
 
       {settingsReady && settingsOpen && (
         <SettingsModal

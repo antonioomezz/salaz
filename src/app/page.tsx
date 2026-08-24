@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { migrarChavesAntigas, saveName, useStoredName } from '@/lib/useStoredName';
 import { Wordmark } from '@/components/Brand';
+import { VersionBadge } from '@/components/VersionBadge';
 
 migrarChavesAntigas();
 
@@ -108,6 +109,8 @@ export default function Home() {
           <b className="text-soft">https</b>.
         </p>
       </div>
+
+      <VersionBadge />
     </main>
   );
 }
