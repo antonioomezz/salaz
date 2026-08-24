@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { UserAudio } from '@/lib/userVolumes';
 import { Mic, Screen, Speaker, SpeakerMuted } from './icons';
 
@@ -9,13 +10,40 @@ type Props = {
   audio: UserAudio;
   /** só mostra o controle da live se a pessoa estiver transmitindo */
   sharing: boolean;
+  /** posição do item clicado, para ancorar o popover */
+  anchor: DOMRect;
   onChange: (patch: Partial<UserAudio>) => void;
   onClose: () => void;
 };
 
-/** Popover de volume individual, no espírito do menu de usuário do Discord. */
-export function UserVolume({ name, audio, sharing, onChange, onClose }: Props) {
+const LARGURA = 240;
+const MARGEM = 8;
+
+/**
+ * Controle de volume individual.
+ *
+ * Vai para um portal com posição fixa de propósito: as duas listas que abrem
+ * este popover têm `overflow-y-auto` e só 240px de largura, então um elemento
+ * posicionado dentro delas seria recortado — o controle abria mas ficava
+ * invisível.
+ */
+export function UserVolume({ name, audio, sharing, anchor, onChange, onClose }: Props) {
   const box = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+
+  // posiciona ao lado do item, sempre dentro da tela
+  useLayoutEffect(() => {
+    const altura = box.current?.offsetHeight ?? 200;
+
+    // abre para a esquerda se couber (lista da direita); senão para a direita
+    const cabeAEsquerda = anchor.left - LARGURA - MARGEM >= MARGEM;
+    const left = cabeAEsquerda ? anchor.left - LARGURA - MARGEM : anchor.right + MARGEM;
+
+    setPos({
+      top: Math.min(Math.max(MARGEM, anchor.top), window.innerHeight - altura - MARGEM),
+      left: Math.min(Math.max(MARGEM, left), window.innerWidth - LARGURA - MARGEM),
+    });
+  }, [anchor, sharing]);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -25,17 +53,22 @@ export function UserVolume({ name, audio, sharing, onChange, onClose }: Props) {
     // no próximo tick, senão o clique que abriu já fecharia o popover
     const timer = setTimeout(() => document.addEventListener('mousedown', onDown), 0);
     window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onClose);
     return () => {
       clearTimeout(timer);
       document.removeEventListener('mousedown', onDown);
       window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onClose);
     };
   }, [onClose]);
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <div
       ref={box}
-      className="pop-in absolute right-2 z-40 mt-1 w-60 rounded-lg bg-ink-800 p-3 shadow-2xl ring-1 ring-black/40"
+      style={{ width: LARGURA, top: pos?.top ?? -9999, left: pos?.left ?? -9999 }}
+      className="pop-in fixed z-[60] rounded-lg bg-ink-800 p-3 shadow-2xl ring-1 ring-black/40"
     >
       <div className="mb-3 truncate text-xs font-bold tracking-wide text-soft uppercase">{name}</div>
 
@@ -57,8 +90,8 @@ export function UserVolume({ name, audio, sharing, onChange, onClose }: Props) {
             onChange={(v) => onChange({ screenVolume: v })}
           />
           <p className="mt-1 text-[10px] leading-tight text-mute">
-            Separado da voz: quem transmite a tela inteira com som acaba repetindo o áudio da
-            própria chamada. Zere aqui para ouvir só as vozes.
+            Separado da voz: quem transmite a tela inteira com som repete o áudio da própria
+            chamada. Zere aqui para ouvir só as vozes.
           </p>
         </div>
       )}
@@ -74,7 +107,8 @@ export function UserVolume({ name, audio, sharing, onChange, onClose }: Props) {
         {audio.muted ? <SpeakerMuted className="h-4 w-4" /> : <Speaker className="h-4 w-4" />}
         {audio.muted ? 'Ouvir de novo' : 'Silenciar esta pessoa'}
       </button>
-    </div>
+    </div>,
+    document.body
   );
 }
 

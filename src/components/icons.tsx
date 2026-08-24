@@ -110,3 +110,10 @@ export const CameraOff = ({ className = base }: P) => (
     <path d="M15 8v4.2l-6-6H13a2 2 0 012 2zm2.4.2a1 1 0 011.6.8v4a1 1 0 01-1.6.8L16 13v-4l1.4-.8z" />
   </svg>
 );
+
+export const Users = ({ className = base }: P) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <path d="M9 12a4 4 0 100-8 4 4 0 000 8zm0 2c-3.3 0-6 1.8-6 4v1a1 1 0 001 1h10a1 1 0 001-1v-1c0-2.2-2.7-4-6-4z" />
+    <path d="M16.5 12a3.5 3.5 0 100-7 3.5 3.5 0 000 7zm.5 2c-.6 0-1.2.1-1.7.2A6.6 6.6 0 0117 18v2h4a1 1 0 001-1v-1c0-2.2-2.2-4-5-4z" />
+  </svg>
+);

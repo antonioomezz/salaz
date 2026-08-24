@@ -15,6 +15,16 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
+    version: '0.9.1',
+    date: '24/08',
+    headline: 'Controle de volume finalmente visível',
+    changes: [
+      'O controle de volume não aparecia: ele abria dentro de barras estreitas com recorte, e ficava cortado.',
+      'Agora ele flutua por cima de tudo e sempre dentro da tela, inclusive no celular.',
+      'A lista de pessoas some em janelas menores que 1024px — um botão no topo traz ela de volta.',
+    ],
+  },
+  {
     version: '0.9.0',
     date: '24/08',
     headline: 'Versão visível no rodapé',

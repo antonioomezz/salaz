@@ -70,7 +70,7 @@ export function Sidebar({
   voice,
 }: Props) {
   const [copied, setCopied] = useState(false);
-  const [volumeAberto, setVolumeAberto] = useState<string | null>(null);
+  const [volumeAberto, setVolumeAberto] = useState<{ id: string; rect: DOMRect } | null>(null);
   const [creating, setCreating] = useState<null | 'text' | 'voice'>(null);
   const [draft, setDraft] = useState('');
 
@@ -154,11 +154,18 @@ export function Sidebar({
                 return (
                   <div key={u.id} className="relative">
                     <button
-                      onClick={() => !souEu && setVolumeAberto(volumeAberto === u.id ? null : u.id)}
+                      onClick={(e) =>
+                        !souEu &&
+                        setVolumeAberto(
+                          volumeAberto?.id === u.id
+                            ? null
+                            : { id: u.id, rect: e.currentTarget.getBoundingClientRect() }
+                        )
+                      }
                       onContextMenu={(e) => {
                         if (souEu) return;
                         e.preventDefault();
-                        setVolumeAberto(u.id);
+                        setVolumeAberto({ id: u.id, rect: e.currentTarget.getBoundingClientRect() });
                       }}
                       disabled={souEu}
                       title={souEu ? undefined : 'Clique (ou botão direito) para ajustar o volume'}
@@ -181,11 +188,12 @@ export function Sidebar({
                       </span>
                     </button>
 
-                    {volumeAberto === u.id && (
+                    {volumeAberto?.id === u.id && (
                       <UserVolume
                         name={u.name}
                         audio={audio}
                         sharing={u.sharing}
+                        anchor={volumeAberto.rect}
                         onChange={(patch) => onUserAudioChange(u.name, patch)}
                         onClose={() => setVolumeAberto(null)}
                       />

@@ -16,6 +16,8 @@ type Props = {
   onUserAudioChange: (name: string, patch: Partial<UserAudio>) => void;
   /** o que o bot está tocando agora, ou null se estiver parado */
   botTocando: string | null;
+  /** aberta na mão em telas estreitas, onde ela não cabe por padrão */
+  visivel: boolean;
 };
 
 export function MemberList({
@@ -25,11 +27,16 @@ export function MemberList({
   userAudio,
   onUserAudioChange,
   botTocando,
+  visivel,
 }: Props) {
-  const [aberto, setAberto] = useState<string | null>(null);
+  const [aberto, setAberto] = useState<{ id: string; rect: DOMRect } | null>(null);
 
   return (
-    <aside className="hidden w-60 shrink-0 flex-col overflow-y-auto bg-ink-600 px-2 py-4 lg:flex">
+    <aside
+      className={`w-60 shrink-0 flex-col overflow-y-auto bg-ink-600 px-2 py-4 ${
+        visivel ? 'flex' : 'hidden lg:flex'
+      }`}
+    >
       {/* o bot aparece como um membro, para ficar claro que ele existe */}
       <div className="mb-2 px-2 text-[11px] font-bold tracking-wider text-mute uppercase">Bot — 1</div>
       <div className="mb-4 flex items-center gap-2.5 rounded px-2 py-1.5">
@@ -64,12 +71,19 @@ export function MemberList({
         return (
           <div key={u.id} className="relative">
             <button
-              onClick={() => !souEu && setAberto(aberto === u.id ? null : u.id)}
+              onClick={(e) =>
+                !souEu &&
+                setAberto(
+                  aberto?.id === u.id
+                    ? null
+                    : { id: u.id, rect: e.currentTarget.getBoundingClientRect() }
+                )
+              }
               onContextMenu={(e) => {
                 if (souEu) return;
                 // sem isto o menu do navegador abre por cima do popover
                 e.preventDefault();
-                setAberto(u.id);
+                setAberto({ id: u.id, rect: e.currentTarget.getBoundingClientRect() });
               }}
               disabled={souEu}
               title={souEu ? undefined : 'Clique (ou botão direito) para ajustar o volume'}
@@ -97,11 +111,12 @@ export function MemberList({
               </span>
             </button>
 
-            {aberto === u.id && (
+            {aberto?.id === u.id && (
               <UserVolume
                 name={u.name}
                 audio={audio}
                 sharing={u.sharing}
+                anchor={aberto.rect}
                 onChange={(patch) => onUserAudioChange(u.name, patch)}
                 onClose={() => setAberto(null)}
               />

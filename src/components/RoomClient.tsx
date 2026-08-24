@@ -33,7 +33,7 @@ import { MusicPlayer } from './MusicPlayer';
 import { RemoteAudio } from './RemoteAudio';
 import { Stage, type Tile } from './Stage';
 import { VersionBadge } from './VersionBadge';
-import { Hash, Speaker } from './icons';
+import { Hash, Speaker, Users } from './icons';
 
 export default function RoomClient({ roomId }: { roomId: string }) {
   const stored = useStoredName();
@@ -98,6 +98,8 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
   const [active, setActive] = useState('geral');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // abaixo de 1024px a lista de membros some; este botão a traz de volta
+  const [listaAberta, setListaAberta] = useState(false);
   const [player, setPlayer] = useState<PlayerState>(EMPTY_PLAYER);
   /** relógio nosso menos o do servidor, para alinhar a posição da música */
   const [clockOffset, setClockOffset] = useState(0);
@@ -349,10 +351,19 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
             {users.length} {users.length === 1 ? 'pessoa' : 'pessoas'} na sala
           </span>
           {!connected && (
-            <span className="ml-auto rounded bg-danger/20 px-2 py-1 text-xs text-danger">
+            <span className="rounded bg-danger/20 px-2 py-1 text-xs text-danger">
               reconectando...
             </span>
           )}
+          <button
+            onClick={() => setListaAberta((v) => !v)}
+            title="Mostrar ou esconder a lista de pessoas"
+            className={`ml-auto rounded p-1.5 transition hover:bg-ink-400 lg:hidden ${
+              listaAberta ? 'text-white' : 'text-mute'
+            }`}
+          >
+            <Users />
+          </button>
         </header>
 
         {voice.error && (
@@ -400,6 +411,7 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
         userAudio={userAudio}
         onUserAudioChange={alterarVolumeDe}
         botTocando={player.current ? player.current.title : null}
+        visivel={listaAberta}
       />
 
       {/* áudio (microfone) dos outros participantes */}
