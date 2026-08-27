@@ -17,10 +17,11 @@ export const RELEASES: Release[] = [
   {
     version: '0.13.1',
     date: '24/08',
-    headline: 'Botão Instalar aparecendo',
+    headline: 'Botão Instalar e foto funcionando',
     changes: [
-      'O botão não aparecia: faltava um handler de "fetch" no service worker, que o Chrome exige para considerar o site instalável.',
-      'Agora o botão está sempre visível — se o navegador não oferecer a instalação automática, ele mostra o caminho pelo menu.',
+      'O botão Instalar não aparecia: faltava um handler de "fetch" no service worker, que o Chrome exige para considerar o site instalável.',
+      'Agora ele está sempre visível — se o navegador não oferecer a instalação automática, mostra o caminho pelo menu.',
+      'A foto de perfil já salva e volta sozinha ao recarregar.',
     ],
   },
   {
