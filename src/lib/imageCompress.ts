@@ -18,10 +18,24 @@ export function dataUrlBytes(dataUrl: string): number {
  * Sem isso uma foto de celular (5-10MB) estouraria o limite do socket e a
  * memória da sala.
  */
-export async function compressImage(file: Blob): Promise<CompressedImage> {
+export type CompressOptions = {
+  /** maior lado da imagem final, em pixels */
+  maxLado?: number;
+  /** tamanho alvo do binário, em KB */
+  alvoKB?: number;
+  /** recorta no centro em quadrado — usado nos avatares */
+  quadrado?: boolean;
+};
+
+export async function compressImage(
+  file: Blob,
+  opts: CompressOptions = {}
+): Promise<CompressedImage> {
+  const maxLado = opts.maxLado ?? MAX_LADO;
+  const alvo = (opts.alvoKB ?? 300) * 1024;
   const bitmap = await createImageBitmap(file);
 
-  const escala = Math.min(1, MAX_LADO / Math.max(bitmap.width, bitmap.height));
+  const escala = Math.min(1, maxLado / Math.max(bitmap.width, bitmap.height));
   const w = Math.max(1, Math.round(bitmap.width * escala));
   const h = Math.max(1, Math.round(bitmap.height * escala));
 
@@ -39,7 +53,7 @@ export async function compressImage(file: Blob): Promise<CompressedImage> {
 
   let qualidade = 0.82;
   let dataUrl = canvas.toDataURL(tipo, qualidade);
-  while (dataUrlBytes(dataUrl) > ALVO && qualidade > 0.4) {
+  while (dataUrlBytes(dataUrl) > alvo && qualidade > 0.4) {
     qualidade -= 0.12;
     dataUrl = canvas.toDataURL(tipo, qualidade);
   }

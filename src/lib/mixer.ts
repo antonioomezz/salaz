@@ -20,8 +20,12 @@ export type Mixer = {
   destroy: () => void;
 };
 
-/** Audição é logarítmica; sem a curva o fim do curso ainda soa alto. */
-const curva = (percent: number) => Math.pow(Math.max(0, percent) / 100, 3);
+/**
+ * Audição é logarítmica, então uma escala linear soa alta até quase o fim.
+ * Expoente 1.8 dá controle fino embaixo sem emudecer cedo — o cubo que usei
+ * antes zerava tudo abaixo de ~17%.
+ */
+const curva = (percent: number) => Math.pow(Math.max(0, percent) / 100, 1.8);
 
 export function createMixer(
   ctx: AudioContext,

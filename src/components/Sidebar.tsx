@@ -50,6 +50,7 @@ type Props = {
   onSelectChannel: (id: string) => void;
   onCreateChannel: (name: string, type: 'text' | 'voice') => void;
   onOpenSettings: () => void;
+  onOpenProfile: () => void;
   userAudio: UserAudioMap;
   onUserAudioChange: (name: string, patch: Partial<UserAudio>) => void;
   voice: Voice;
@@ -65,6 +66,7 @@ export function Sidebar({
   onSelectChannel,
   onCreateChannel,
   onOpenSettings,
+  onOpenProfile,
   userAudio,
   onUserAudioChange,
   voice,
@@ -253,9 +255,14 @@ export function Sidebar({
 
       {/* painel do usuário */}
       <div className="flex h-13 shrink-0 items-center gap-2 bg-ink-700 px-2 py-1.5">
-        {me && <Avatar user={me} size={32} speaking={!!speaking[me.id]} />}
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-[13px] font-semibold text-white">{me?.name ?? '...'}</div>
+        <button
+          onClick={onOpenProfile}
+          title="Seu perfil e foto"
+          className="flex min-w-0 flex-1 items-center gap-2 rounded p-0.5 text-left transition hover:bg-ink-400/50"
+        >
+          {me && <Avatar user={me} size={32} speaking={!!speaking[me.id]} />}
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[13px] font-semibold text-white">{me?.name ?? '...'}</div>
           <div
             className={`text-[11px] ${voice.inVoice && !voice.micLive ? 'text-danger' : 'text-mute'}`}
           >
@@ -266,8 +273,9 @@ export function Sidebar({
                   ? 'em chamada'
                   : 'microfone mudo'
                 : 'online'}
+            </div>
           </div>
-        </div>
+        </button>
         <button
           onClick={voice.toggleMic}
           disabled={!voice.inVoice}

@@ -18,6 +18,8 @@ export type User = {
   /** id da MediaStream da câmera, para o receptor distinguir de tela */
   camStreamId: string | null;
   screenStreamId: string | null;
+  /** foto de perfil, quando a pessoa tem uma salva */
+  avatarUrl: string | null;
 };
 
 /** 'bot' e 'card' são mensagens geradas pelo servidor, não por uma pessoa. */
@@ -44,6 +46,7 @@ export type Message = {
   userId: string;
   name: string;
   color: string;
+  avatarUrl?: string | null;
   text: string;
   ts: number;
   kind?: MessageKind;

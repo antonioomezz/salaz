@@ -108,13 +108,14 @@ export function MusicPlayer({ state, clockOffset, volume, onVolumeChange, onEnde
   }, []);
 
   /*
-   * Audição é logarítmica: numa escala linear, metade do curso ainda soa
-   * quase no máximo — era por isso que o mínimo parecia alto. Elevando ao
-   * cubo, o fim do curso fica realmente baixo e sobra controle fino embaixo.
+   * Audição é logarítmica, então escala linear soa alta até quase o fim.
+   * Expoente 1.8 dá controle fino embaixo; o cubo anterior era agressivo
+   * demais e emudecia tudo abaixo de ~17%. O piso de 1 garante que só o
+   * zero do slider seja silêncio de verdade.
    */
   useEffect(() => {
     if (!pronto) return;
-    const real = Math.round(Math.pow(volume / 100, 3) * 100);
+    const real = volume === 0 ? 0 : Math.max(1, Math.round(Math.pow(volume / 100, 1.8) * 100));
     player.current?.setVolume(real);
   }, [volume, pronto]);
 

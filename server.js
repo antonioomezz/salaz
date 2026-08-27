@@ -264,7 +264,7 @@ app.prepare().then(() => {
 
     const me = () => (roomId ? rooms.get(roomId)?.users.get(socket.id) : null);
 
-    socket.on('join', ({ roomId: rid, name } = {}, ack) => {
+    socket.on('join', ({ roomId: rid, name, avatarUrl } = {}, ack) => {
       if (typeof rid !== 'string' || !rid.trim()) return;
       roomId = rid.trim().slice(0, 32);
       const room = getRoom(roomId);
@@ -281,6 +281,7 @@ app.prepare().then(() => {
         // e qual é tela, já que o track remoto não carrega essa informação
         camStreamId: null,
         screenStreamId: null,
+        avatarUrl: typeof avatarUrl === 'string' && avatarUrl.startsWith('https://') ? avatarUrl : null,
       };
       room.users.set(socket.id, user);
       socket.join(roomId);
@@ -325,6 +326,7 @@ app.prepare().then(() => {
         userId: user.id,
         name: user.name,
         color: user.color,
+        avatarUrl: user.avatarUrl,
         text: clean,
         ts: Date.now(),
         kind: imagemValida ? 'image' : 'text',
@@ -354,6 +356,7 @@ app.prepare().then(() => {
         userId: user.id,
         name: user.name,
         color: user.color,
+        avatarUrl: user.avatarUrl,
         text: bruto.slice(0, 2000),
         ts: Date.now(),
         kind: 'text',
@@ -526,7 +529,7 @@ app.prepare().then(() => {
       broadcastUsers(io, room);
     });
 
-    socket.on('state', ({ muted, deafened, sharing, camOn, camStreamId, screenStreamId } = {}) => {
+    socket.on('state', ({ muted, deafened, sharing, camOn, camStreamId, screenStreamId, avatarUrl } = {}) => {
       const room = roomId && rooms.get(roomId);
       const user = me();
       if (!room || !user) return;
@@ -534,6 +537,10 @@ app.prepare().then(() => {
       if (typeof deafened === 'boolean') user.deafened = deafened;
       if (typeof sharing === 'boolean') user.sharing = sharing;
       if (typeof camOn === 'boolean') user.camOn = camOn;
+      if (avatarUrl !== undefined) {
+        user.avatarUrl =
+          typeof avatarUrl === 'string' && avatarUrl.startsWith('https://') ? avatarUrl : null;
+      }
       if (camStreamId !== undefined) user.camStreamId = camStreamId || null;
       if (screenStreamId !== undefined) user.screenStreamId = screenStreamId || null;
       broadcastUsers(io, room);

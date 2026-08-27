@@ -24,7 +24,9 @@ import {
 } from '@/lib/userVolumes';
 import { EMPTY_PLAYER, type Channel, type JoinAck, type Message, type PlayerState, type User } from '@/lib/types';
 import { isMusicCommand } from '@/lib/musicCommands';
+import { useProfile } from '@/hooks/useProfile';
 import { Wordmark } from './Brand';
+import { ProfileModal } from './ProfileModal';
 import { Chat } from './Chat';
 import { MemberList } from './MemberList';
 import { SettingsModal } from './SettingsModal';
@@ -98,6 +100,7 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
   const [active, setActive] = useState('geral');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   // abaixo de 1024px a lista de membros some; este botão a traz de volta
   const [listaAberta, setListaAberta] = useState(false);
   const [player, setPlayer] = useState<PlayerState>(EMPTY_PLAYER);
@@ -126,6 +129,18 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
     saveUserAudio(next);
   };
 
+  // -------------------------------------------------------------- perfil
+  const perfil = useProfile(name);
+
+  // avisa a sala assim que a foto chega ou muda
+  const avatarEnviado = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (perfil.carregando) return;
+    if (avatarEnviado.current === perfil.avatarUrl) return;
+    avatarEnviado.current = perfil.avatarUrl;
+    if (connected) getSocket().emit('state', { avatarUrl: perfil.avatarUrl });
+  }, [perfil.avatarUrl, perfil.carregando, connected]);
+
   // meu canal de voz vem do servidor: evita divergência entre os clientes
   const myVoiceChannel = users.find((u) => u.id === myId)?.voiceChannel ?? null;
 
@@ -137,6 +152,12 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
   const peerIds = useMemo(() => (peerKey ? peerKey.split(',') : []), [peerKey]);
 
   const voice = useVoice({ myId, peerIds, settings });
+
+  // o join acontece dentro de um efeito que não deve depender do perfil
+  const perfilRef = useRef<string | null>(null);
+  useEffect(() => {
+    perfilRef.current = perfil.avatarUrl;
+  });
 
   // os handlers do socket precisam da versão mais recente da API de voz
   const voiceRef = useRef(voice);
@@ -160,7 +181,7 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
 
     const join = () => {
       setConnected(true);
-      s.emit('join', { roomId, name }, (ack: JoinAck) => {
+      s.emit('join', { roomId, name, avatarUrl: perfilRef.current }, (ack: JoinAck) => {
         setMyId(ack.you.id);
         setUsers(ack.users);
         setChannels(ack.channels);
@@ -297,6 +318,7 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
         onSelectChannel={setActive}
         onCreateChannel={createChannel}
         onOpenSettings={() => setSettingsOpen(true)}
+        onOpenProfile={() => setProfileOpen(true)}
         userAudio={userAudio}
         onUserAudioChange={alterarVolumeDe}
         voice={{
@@ -441,6 +463,19 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
           />
         );
       })}
+
+      {profileOpen && (
+        <ProfileModal
+          name={name}
+          color={me?.color ?? '#5865f2'}
+          avatarUrl={perfil.avatarUrl}
+          carregando={perfil.carregando}
+          erro={perfil.erro}
+          onPickPhoto={perfil.salvarFoto}
+          onRemovePhoto={perfil.removerFoto}
+          onClose={() => setProfileOpen(false)}
+        />
+      )}
 
       <VersionBadge />
 

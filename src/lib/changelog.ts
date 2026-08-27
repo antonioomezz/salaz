@@ -15,6 +15,16 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
+    version: '0.13.0',
+    date: '24/08',
+    headline: 'Foto de perfil e instalação como app',
+    changes: [
+      'Foto de perfil salva na nuvem: clique no seu nome, no rodapé da barra lateral. Ela volta sempre que você entrar.',
+      'Botão Instalar ao lado da versão — o Negoneycord ganha ícone próprio e abre em janela sem barra de navegador.',
+      'Volume da música corrigido: abaixo de 17% ficava mudo. A curva ficou mais suave e só o zero é silêncio.',
+    ],
+  },
+  {
     version: '0.12.0',
     date: '24/08',
     headline: 'Corta o som do teclado',

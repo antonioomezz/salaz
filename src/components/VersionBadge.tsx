@@ -1,16 +1,58 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { CURRENT_VERSION, RELEASES } from '@/lib/changelog';
 import { Logo } from './Brand';
+import { Download } from './icons';
 
 /**
  * Selo de versão no canto inferior direito. Além do histórico, serve para
  * saber num relance se o navegador já carregou a versão nova depois de um
  * deploy — sem precisar abrir log nenhum.
  */
+/** Evento do Chrome que permite oferecer a instalação na hora que quisermos. */
+type PromptDeInstalacao = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+};
+
 export function VersionBadge() {
   const [aberto, setAberto] = useState(false);
+  const [instalar, setInstalar] = useState<PromptDeInstalacao | null>(null);
+  const [instaladoAgora, setInstaladoAgora] = useState(false);
+
+  // já está rodando como app instalado? lido direto, sem setState em efeito
+  const standalone = useSyncExternalStore(
+    (aviso) => {
+      const mq = window.matchMedia?.('(display-mode: standalone)');
+      mq?.addEventListener('change', aviso);
+      return () => mq?.removeEventListener('change', aviso);
+    },
+    () =>
+      window.matchMedia?.('(display-mode: standalone)').matches ||
+      (window.navigator as Navigator & { standalone?: boolean }).standalone === true,
+    () => false
+  );
+
+  const instalado = standalone || instaladoAgora;
+
+  useEffect(() => {
+    const guardar = (e: Event) => {
+      // sem isto o Chrome mostra o próprio aviso, fora do lugar que queremos
+      e.preventDefault();
+      setInstalar(e as PromptDeInstalacao);
+    };
+    const aoInstalar = () => {
+      setInstaladoAgora(true);
+      setInstalar(null);
+    };
+    window.addEventListener('beforeinstallprompt', guardar);
+    window.addEventListener('appinstalled', aoInstalar);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', guardar);
+      window.removeEventListener('appinstalled', aoInstalar);
+    };
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setAberto(false);
@@ -20,13 +62,30 @@ export function VersionBadge() {
 
   return (
     <>
-      <button
-        onClick={() => setAberto(true)}
-        title="Ver o que mudou em cada versão"
-        className="fixed right-3 bottom-3 z-40 rounded-full bg-ink-800/80 px-2.5 py-1 font-mono text-[10px] text-mute opacity-60 backdrop-blur transition hover:text-bright hover:opacity-100"
-      >
-        v{CURRENT_VERSION}
-      </button>
+      <div className="fixed right-3 bottom-3 z-40 flex items-center gap-1.5 opacity-60 transition hover:opacity-100">
+        {instalar && !instalado && (
+          <button
+            onClick={async () => {
+              await instalar.prompt();
+              const { outcome } = await instalar.userChoice;
+              if (outcome === 'accepted') setInstaladoAgora(true);
+              setInstalar(null);
+            }}
+            title="Instalar o Negoneycord como aplicativo, com ícone próprio"
+            className="flex items-center gap-1.5 rounded-full bg-blurple px-2.5 py-1 text-[10px] font-semibold text-white shadow-lg shadow-blurple/25 transition hover:bg-blurple-dark"
+          >
+            <Download className="h-3 w-3" />
+            Instalar
+          </button>
+        )}
+        <button
+          onClick={() => setAberto(true)}
+          title="Ver o que mudou em cada versão"
+          className="rounded-full bg-ink-800/80 px-2.5 py-1 font-mono text-[10px] text-mute backdrop-blur transition hover:text-bright"
+        >
+          v{CURRENT_VERSION}
+        </button>
+      </div>
 
       {aberto && (
         <div
@@ -85,7 +144,9 @@ export function VersionBadge() {
             </div>
 
             <div className="shrink-0 border-t border-ink-400 px-6 py-3 text-center text-[11px] text-mute">
-              Se o número aqui não mudou depois de um deploy, recarregue com Ctrl + Shift + R.
+              {instalado
+                ? 'Rodando como aplicativo instalado.'
+                : 'Se o número aqui não mudou depois de um deploy, recarregue com Ctrl + Shift + R.'}
             </div>
           </div>
         </div>

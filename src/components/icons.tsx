@@ -117,3 +117,10 @@ export const Users = ({ className = base }: P) => (
     <path d="M16.5 12a3.5 3.5 0 100-7 3.5 3.5 0 000 7zm.5 2c-.6 0-1.2.1-1.7.2A6.6 6.6 0 0117 18v2h4a1 1 0 001-1v-1c0-2.2-2.2-4-5-4z" />
   </svg>
 );
+
+export const Download = ({ className = base }: P) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
+    <path d="M12 3a1 1 0 011 1v9.6l3.3-3.3a1 1 0 011.4 1.4l-5 5a1 1 0 01-1.4 0l-5-5a1 1 0 111.4-1.4l3.3 3.3V4a1 1 0 011-1z" />
+    <path d="M4 17a1 1 0 011 1v1h14v-1a1 1 0 112 0v2a1 1 0 01-1 1H4a1 1 0 01-1-1v-2a1 1 0 011-1z" />
+  </svg>
+);
