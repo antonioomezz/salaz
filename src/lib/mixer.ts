@@ -20,6 +20,9 @@ export type Mixer = {
   destroy: () => void;
 };
 
+/** Audição é logarítmica; sem a curva o fim do curso ainda soa alto. */
+const curva = (percent: number) => Math.pow(Math.max(0, percent) / 100, 3);
+
 export function createMixer(
   ctx: AudioContext,
   micTrack: MediaStreamTrack,
@@ -33,7 +36,7 @@ export function createMixer(
     const dest = ctx.createMediaStreamDestination();
 
     micGain.gain.value = opts.micVolume / 100;
-    musicGain.gain.value = opts.musicVolume / 100;
+    musicGain.gain.value = curva(opts.musicVolume);
 
     micSrc.connect(micGain).connect(master);
     musicGain.connect(master);
@@ -58,7 +61,7 @@ export function createMixer(
         micGain.gain.value = p / 100;
       },
       setMusicGain: (p) => {
-        musicGain.gain.value = p / 100;
+        musicGain.gain.value = curva(p);
       },
       playFile: (url) => {
         stopFile();

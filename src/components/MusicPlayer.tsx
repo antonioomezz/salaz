@@ -107,8 +107,15 @@ export function MusicPlayer({ state, clockOffset, volume, onVolumeChange, onEnde
     };
   }, []);
 
+  /*
+   * Audição é logarítmica: numa escala linear, metade do curso ainda soa
+   * quase no máximo — era por isso que o mínimo parecia alto. Elevando ao
+   * cubo, o fim do curso fica realmente baixo e sobra controle fino embaixo.
+   */
   useEffect(() => {
-    if (pronto) player.current?.setVolume(volume);
+    if (!pronto) return;
+    const real = Math.round(Math.pow(volume / 100, 3) * 100);
+    player.current?.setVolume(real);
   }, [volume, pronto]);
 
   // aplica o estado do servidor
@@ -197,9 +204,10 @@ export function MusicPlayer({ state, clockOffset, volume, onVolumeChange, onEnde
             max={100}
             value={volume}
             onChange={(e) => onVolumeChange(Number(e.target.value))}
-            title="Volume da música (só para você)"
+            title={`Volume da música: ${volume}% (só para você)`}
             className="w-24 accent-blurple"
           />
+          <span className="w-8 text-right font-mono text-[10px] text-mute">{volume}%</span>
         </div>
 
         <button

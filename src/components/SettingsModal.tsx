@@ -162,9 +162,18 @@ export function SettingsModal({
             <Slider
               label="Volume de saída"
               value={settings.outputVolume}
-              max={100}
+              max={200}
               onChange={(v) => set('outputVolume', v)}
+              hint={
+                settings.outputVolume > 100
+                  ? `${settings.outputVolume}% — amplificado`
+                  : undefined
+              }
             />
+            <p className="mt-1.5 text-[10px] leading-tight text-mute">
+              Acima de 100% o áudio é amplificado por software. Útil quando o fone é fraco;
+              exagerar distorce.
+            </p>
           </div>
 
           {/* ------------------------------------------------ processamento */}
@@ -337,7 +346,7 @@ export function SettingsModal({
 
             <div className="mt-3">
               <Slider
-                label="Volume da música na chamada"
+                label="Volume do arquivo na chamada"
                 value={settings.musicVolume}
                 max={100}
                 onChange={(v) => set('musicVolume', v)}

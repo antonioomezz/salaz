@@ -214,7 +214,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
    * foi escolhido da primeira vez. Por isso removemos e recriamos a track: é o
    * que garante que o preset realmente troque AV1 por VP9/H264.
    */
-  const recriarEnvioDeTela = useCallback(() => {
+  const recriarEnvioDeTela = useCallback((seguro = false) => {
     const stream = screenStream.current;
     const video = stream?.getVideoTracks()[0];
     if (!stream || !video) return;
@@ -229,7 +229,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
         const transceiver = peer.pc
           .getTransceivers()
           .find((t) => t.sender === peer.screenVideoSender);
-        if (transceiver) preferScreenCodecs(transceiver, preset);
+        if (transceiver) preferScreenCodecs(transceiver, preset, seguro);
         void tuneScreenSender(peer.screenVideoSender, preset, quantos, cfg.current.screenFps);
       } catch {
         /* se falhar, a transmissão segue no codec anterior */
@@ -366,6 +366,60 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     return () => clearInterval(timer);
   }, [localScreen]);
 
+  /**
+   * Vigia a codificação da tela. Se o codificador não produzir quadro nenhum,
+   * o outro lado vê tela PRETA enquanto quem transmite continua vendo tudo
+   * certo — a prévia local não passa pelo codificador. Nesse caso trocamos
+   * para H264, que tem encoder de hardware em praticamente toda máquina.
+   */
+  const jaCaiuParaSeguro = useRef(false);
+  const recriarRef = useRef<(seguro?: boolean) => void>(() => {});
+
+  useEffect(() => {
+    if (!localScreen) {
+      jaCaiuParaSeguro.current = false;
+      return;
+    }
+    let ultimoFrames = -1;
+    let paradoDesde = 0;
+
+    const timer = setInterval(async () => {
+      const sender = [...peers.current.values()].find((p) => p.screenVideoSender)?.screenVideoSender;
+      if (!sender) return;
+      try {
+        const stats = await sender.getStats();
+        let frames = 0;
+        stats.forEach((st) => {
+          if (st.type === 'outbound-rtp' && st.kind === 'video') frames = st.framesSent ?? 0;
+        });
+
+        const parado = frames === 0 || frames === ultimoFrames;
+        ultimoFrames = frames;
+
+        if (!parado) {
+          paradoDesde = 0;
+          return;
+        }
+        if (!paradoDesde) {
+          paradoDesde = Date.now();
+          return;
+        }
+        if (Date.now() - paradoDesde > 7000 && !jaCaiuParaSeguro.current) {
+          jaCaiuParaSeguro.current = true;
+          setScreenAudioInfo(
+            'A transmissão não estava sendo codificada e apareceria preta para os outros. Troquei para um codec mais compatível (H264) automaticamente.'
+          );
+          recriarRef.current(true);
+          paradoDesde = 0;
+        }
+      } catch {
+        /* sem estatísticas: não há o que vigiar */
+      }
+    }, 2500);
+
+    return () => clearInterval(timer);
+  }, [localScreen]);
+
   // ---------------------------------------------------------------- peers
   const dropPeer = useCallback(
     (id: string) => {
@@ -473,6 +527,10 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     },
     [myId, watchLevel, afinarEnvioDeTela]
   );
+
+  useEffect(() => {
+    recriarRef.current = recriarEnvioDeTela;
+  });
 
   // reconcilia a malha sempre que a lista do canal de voz muda
   useEffect(() => {

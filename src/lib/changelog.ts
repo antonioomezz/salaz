@@ -15,6 +15,18 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
+    version: '0.11.0',
+    date: '24/08',
+    headline: 'Corrige tela preta para quem assiste',
+    changes: [
+      'A transmissão podia chegar preta nos outros enquanto quem transmitia via tudo certo — a prévia local não passa pelo codificador, então o problema ficava invisível de um lado só.',
+      'Causa: o codec AV1 era preferido, mas é codificado por software e trava a 1080p; e uma trava minha impedia o codificador de reduzir para se salvar.',
+      'Agora VP9 vem primeiro, e um vigia troca para H264 sozinho se nada estiver sendo codificado.',
+      'Volume de saída vai até 200%, para fones fracos.',
+      'Volume da música ganhou curva perceptual: o fim do curso fica realmente baixo, em vez de continuar alto.',
+    ],
+  },
+  {
     version: '0.10.0',
     date: '24/08',
     headline: 'Som da transmissão sob controle',

@@ -37,24 +37,31 @@ export function displayConstraints(
 }
 
 /**
- * A ordem muda conforme o objetivo:
+ * VP9 primeiro nos dois presets: comprime tela muito bem e tem suporte amplo.
  *
- * - Texto/código: AV1 e VP9 comprimem muito melhor conteúdo estático e nítido.
- * - Vídeo/jogo: o AV1 costuma ser codificado por software e come CPU demais a
- *   60 fps, o que derruba justamente a fluidez. VP9 e H264 têm bem mais chance
- *   de usar o encoder de hardware da placa.
+ * O AV1 fica por último de propósito. Ele comprime melhor no papel, mas quase
+ * sempre é codificado por SOFTWARE — a 1080p o codificador não dá conta, para
+ * de produzir quadros e o outro lado vê tela preta, enquanto quem transmite
+ * continua vendo tudo certo (a prévia local não passa pelo codificador).
  */
 const ORDEM: Record<ScreenPreset, string[]> = {
-  detail: ['video/AV1', 'video/VP9', 'video/VP8', 'video/H264'],
+  detail: ['video/VP9', 'video/VP8', 'video/H264', 'video/AV1'],
   motion: ['video/VP9', 'video/H264', 'video/VP8', 'video/AV1'],
 };
 
-export function preferScreenCodecs(transceiver: RTCRtpTransceiver, preset: ScreenPreset) {
+/** Última tentativa quando nada é codificado: H264 tem encoder de hardware quase sempre. */
+export const ORDEM_SEGURA = ['video/H264', 'video/VP8', 'video/VP9', 'video/AV1'];
+
+export function preferScreenCodecs(
+  transceiver: RTCRtpTransceiver,
+  preset: ScreenPreset,
+  seguro = false
+) {
   try {
     const caps = RTCRtpSender.getCapabilities?.('video');
     if (!caps?.codecs || !transceiver.setCodecPreferences) return;
 
-    const preferencia = ORDEM[preset];
+    const preferencia = seguro ? ORDEM_SEGURA : ORDEM[preset];
     const posicao = (mime: string) => {
       const i = preferencia.indexOf(mime);
       return i === -1 ? preferencia.length : i;
@@ -114,8 +121,12 @@ export async function tuneScreenSender(
     );
     params.encodings[0].maxBitrate = teto;
     params.encodings[0].maxFramerate = fps;
-    // não deixa o navegador reduzir a resolução por conta própria
-    params.encodings[0].scaleResolutionDownBy = 1;
+    /*
+     * Sem travar scaleResolutionDownBy: fixá-lo em 1 tira a válvula de escape
+     * do codificador. Quando ele não dá conta, não consegue reduzir para se
+     * salvar — simplesmente para, e o outro lado vê tela preta.
+     */
+    delete params.encodings[0].scaleResolutionDownBy;
 
     // 'maintain-framerate' derruba resolução para segurar os quadros — é o que
     // se quer em jogo e vídeo. Em texto vale o contrário.
