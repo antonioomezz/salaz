@@ -104,6 +104,10 @@ export function useVoice({ myId, peerIds, settings }: Params) {
   /** há um arquivo de música tocando na chamada agora */
   const [playingFile, setPlayingFile] = useState<string | null>(null);
   const precisaMixer = useRef(false);
+  /** estado da porta de ruído, fora do React para não re-renderizar a cada 120ms */
+  const portaAbertaAte = useRef(0);
+  const portaEstaAberta = useRef(true);
+  const micLigadoRef = useRef(true);
 
   const ctx = useCallback(() => {
     audioCtx.current ||= new AudioContext();
@@ -120,6 +124,13 @@ export function useVoice({ myId, peerIds, settings }: Params) {
         const src = audio.createMediaStreamSource(stream);
         const analyser = audio.createAnalyser();
         analyser.fftSize = 512;
+        /*
+         * A suavização padrão do WebAudio é 0.8: o nível medido leva segundos
+         * para cair depois que o som para. Isso deixa a porta de ruído aberta
+         * muito além do necessário, justamente durante as batidas de teclado
+         * que ela deveria cortar.
+         */
+        analyser.smoothingTimeConstant = 0.3;
         src.connect(analyser);
         analysers.current.set(key, {
           analyser,
@@ -151,7 +162,24 @@ export function useVoice({ myId, peerIds, settings }: Params) {
         next[key] = level > 12;
         if (key === myId) mine = level;
       }
-      setInputLevel(Math.min(100, Math.round((mine / 60) * 100)));
+      const nivel = Math.min(100, Math.round((mine / 60) * 100));
+      setInputLevel(nivel);
+
+      /*
+       * Porta de ruído: teclado e chiado passam pela supressão do navegador,
+       * que é boa para som contínuo e fraca para batidas curtas. Aqui o
+       * microfone só abre quando o nível passa do limiar, e fica aberto por
+       * mais um instante para não cortar o fim das palavras.
+       */
+      if (cfg.current.noiseGate && mixer.current && micLigadoRef.current) {
+        const falando = nivel >= cfg.current.noiseGateThreshold;
+        if (falando) portaAbertaAte.current = Date.now() + 400;
+        const aberta = Date.now() < portaAbertaAte.current;
+        if (aberta !== portaEstaAberta.current) {
+          portaEstaAberta.current = aberta;
+          mixer.current.setMicGain(aberta ? cfg.current.inputVolume : 0);
+        }
+      }
       setSpeaking((prev) => {
         const keys = new Set([...Object.keys(prev), ...Object.keys(next)]);
         for (const k of keys) if (!!prev[k] !== !!next[k]) return next;
@@ -171,7 +199,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
       mixer.current?.destroy();
       mixer.current = null;
 
-      if (volume === 100 && !precisaMixer.current) return raw;
+      if (volume === 100 && !precisaMixer.current && !cfg.current.noiseGate) return raw;
 
       const m = createMixer(ctx(), raw, {
         micVolume: volume,
@@ -702,6 +730,10 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     getSocket().emit('voice:leave');
   }, [myId, dropPeer, stopScreen, stopCam, unwatchLevel]);
 
+  useEffect(() => {
+    micLigadoRef.current = micOn && !deafened;
+  }, [micOn, deafened]);
+
   const setMicEnabled = useCallback((on: boolean) => {
     if (rawMic.current) rawMic.current.enabled = on;
     if (outgoingMic.current) outgoingMic.current.enabled = on;
@@ -874,6 +906,14 @@ export function useVoice({ myId, peerIds, settings }: Params) {
           if (rawMic.current) rawMic.current.enabled = wasEnabled;
           pushMicToPeers(track);
           setMicLive(true);
+        } else if (next.noiseGate !== previous.noiseGate) {
+          // ligar ou desligar a porta muda se o mixer precisa existir
+          const wasEnabled = rawMic.current?.enabled ?? true;
+          const track = buildOutgoing(rawMic.current!, next.inputVolume);
+          track.enabled = wasEnabled;
+          outgoingMic.current = track;
+          pushMicToPeers(track);
+          portaEstaAberta.current = true;
         } else if (next.musicVolume !== previous.musicVolume && mixer.current) {
           mixer.current.setMusicGain(next.musicVolume);
         } else if (next.inputVolume !== previous.inputVolume && rawMic.current) {

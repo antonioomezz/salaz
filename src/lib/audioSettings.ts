@@ -13,6 +13,18 @@ export type AudioSettings = {
   echoCancellation: boolean;
   noiseSuppression: boolean;
   autoGainControl: boolean;
+  /**
+   * Isolamento de voz do próprio Chrome (mais recente e bem mais forte que o
+   * noiseSuppression). Ignorado em silêncio por navegadores sem suporte.
+   */
+  voiceIsolation: boolean;
+  /**
+   * Porta de ruído: só transmite quando você realmente fala. É o que corta
+   * teclado e chiado de fundo, que a supressão do navegador deixa passar.
+   */
+  noiseGate: boolean;
+  /** 0-100: a partir de que nível o microfone abre */
+  noiseGateThreshold: number;
   sfxEnabled: boolean;
   /** 0-100 */
   sfxVolume: number;
@@ -45,6 +57,9 @@ export const DEFAULT_SETTINGS: AudioSettings = {
   echoCancellation: true,
   noiseSuppression: true,
   autoGainControl: true,
+  voiceIsolation: true,
+  noiseGate: true,
+  noiseGateThreshold: 12,
   sfxEnabled: true,
   sfxVolume: 60,
   screenPreset: 'detail',
@@ -84,6 +99,8 @@ export function micConstraints(settings: AudioSettings): MediaStreamConstraints 
       echoCancellation: settings.echoCancellation,
       noiseSuppression: settings.noiseSuppression,
       autoGainControl: settings.autoGainControl,
+      // constraint recente; navegador que não conhece simplesmente ignora
+      ...(settings.voiceIsolation ? { voiceIsolation: true } : {}),
     },
     video: false,
   };

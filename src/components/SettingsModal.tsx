@@ -125,15 +125,33 @@ export function SettingsModal({
                 {inVoice ? 'fale e veja a barra mexer' : 'entre em um canal de voz para testar'}
               </span>
             </div>
-            <div className="h-2.5 overflow-hidden rounded-full bg-ink-900">
+            <div className="relative h-2.5 overflow-hidden rounded-full bg-ink-900">
               <div
                 className="h-full rounded-full transition-[width] duration-75"
                 style={{
                   width: `${inputLevel}%`,
-                  background: inputLevel > 80 ? 'var(--color-danger)' : 'var(--color-online)',
+                  background:
+                    settings.noiseGate && inputLevel < settings.noiseGateThreshold
+                      ? 'var(--color-ink-200)'
+                      : inputLevel > 80
+                        ? 'var(--color-danger)'
+                        : 'var(--color-online)',
                 }}
               />
+              {settings.noiseGate && (
+                <span
+                  className="absolute top-0 h-full w-0.5 bg-amber-400"
+                  style={{ left: `${settings.noiseGateThreshold}%` }}
+                  title="Abaixo desta marca o microfone fica fechado"
+                />
+              )}
             </div>
+            {settings.noiseGate && (
+              <p className="mt-1.5 text-[10px] leading-tight text-mute">
+                Cinza = microfone fechado. Fale normalmente e ajuste o limiar até a barra passar
+                da marca só quando você falar.
+              </p>
+            )}
           </div>
 
           {/* ------------------------------------------------ saída */}
@@ -197,7 +215,35 @@ export function SettingsModal({
                 checked={settings.autoGainControl}
                 onChange={(v) => set('autoGainControl', v)}
               />
+              <Toggle
+                label="Isolamento de voz"
+                hint="Filtro de voz do próprio Chrome, mais forte que a redução de ruído"
+                checked={settings.voiceIsolation}
+                onChange={(v) => set('voiceIsolation', v)}
+              />
+              <Toggle
+                label="Porta de ruído"
+                hint="Só transmite quando você fala — é o que corta o som do teclado"
+                checked={settings.noiseGate}
+                onChange={(v) => set('noiseGate', v)}
+              />
             </div>
+
+            {settings.noiseGate && (
+              <div className="mt-3">
+                <Slider
+                  label="Sensibilidade da porta"
+                  value={settings.noiseGateThreshold}
+                  max={50}
+                  onChange={(v) => set('noiseGateThreshold', v)}
+                  hint={`abre acima de ${settings.noiseGateThreshold}%`}
+                />
+                <p className="mt-1 text-[10px] leading-tight text-mute">
+                  Mais alto corta mais ruído, mas pode engolir o começo das frases. Use a barra de
+                  teste acima para calibrar.
+                </p>
+              </div>
+            )}
             <p className="mt-2 text-[11px] text-mute">
               Mudar qualquer um destes recaptura o microfone na hora, sem derrubar a chamada.
             </p>

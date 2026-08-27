@@ -15,6 +15,16 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
+    version: '0.12.0',
+    date: '24/08',
+    headline: 'Corta o som do teclado',
+    changes: [
+      'Porta de ruído: o microfone só transmite quando você fala de verdade — é o que corta teclado e chiado, que a supressão do navegador deixa passar.',
+      'A barra de teste do microfone mostra o limiar, para você calibrar vendo.',
+      'Isolamento de voz do Chrome ligado, um filtro bem mais forte que a redução de ruído comum.',
+    ],
+  },
+  {
     version: '0.11.0',
     date: '24/08',
     headline: 'Corrige tela preta para quem assiste',

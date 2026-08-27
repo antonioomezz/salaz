@@ -58,7 +58,9 @@ export function createMixer(
     return {
       track: dest.stream.getAudioTracks()[0] ?? micTrack,
       setMicGain: (p) => {
-        micGain.gain.value = p / 100;
+        // rampa curta: mudar o ganho de uma vez produz estalo audível
+        const alvo = Math.max(0, p / 100);
+        micGain.gain.setTargetAtTime(alvo, ctx.currentTime, 0.015);
       },
       setMusicGain: (p) => {
         musicGain.gain.value = curva(p);
