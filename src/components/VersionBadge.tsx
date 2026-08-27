@@ -20,6 +20,7 @@ export function VersionBadge() {
   const [aberto, setAberto] = useState(false);
   const [instalar, setInstalar] = useState<PromptDeInstalacao | null>(null);
   const [instaladoAgora, setInstaladoAgora] = useState(false);
+  const [comoInstalar, setComoInstalar] = useState(false);
 
   // já está rodando como app instalado? lido direto, sem setState em efeito
   const standalone = useSyncExternalStore(
@@ -63,9 +64,16 @@ export function VersionBadge() {
   return (
     <>
       <div className="fixed right-3 bottom-3 z-40 flex items-center gap-1.5 opacity-60 transition hover:opacity-100">
-        {instalar && !instalado && (
+        {!instalado && (
           <button
             onClick={async () => {
+              // o navegador nem sempre oferece a instalação automática:
+              // Firefox e Safari nunca, e o Chrome só depois de algum uso.
+              // Sem o atalho, explicamos o caminho manual.
+              if (!instalar) {
+                setComoInstalar(true);
+                return;
+              }
               await instalar.prompt();
               const { outcome } = await instalar.userChoice;
               if (outcome === 'accepted') setInstaladoAgora(true);
@@ -86,6 +94,57 @@ export function VersionBadge() {
           v{CURRENT_VERSION}
         </button>
       </div>
+
+      {comoInstalar && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setComoInstalar(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl bg-ink-500 p-6 shadow-2xl ring-1 ring-white/5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="mb-1 text-base font-bold text-white">Instalar o Negoneycord</h2>
+            <p className="mb-4 text-xs leading-relaxed text-mute">
+              Seu navegador não ofereceu a instalação automática agora. Dá para fazer pelo menu
+              dele:
+            </p>
+
+            <div className="space-y-3 text-[13px] leading-snug text-bright">
+              <div>
+                <div className="text-xs font-bold tracking-wide text-soft uppercase">
+                  Chrome e Edge
+                </div>
+                <p className="text-mute">
+                  Menu <b>⋮</b> → <b>Transmitir, salvar e compartilhar</b> →{' '}
+                  <b>Instalar página como aplicativo</b>. Ou clique no ícone de instalação na barra
+                  de endereço.
+                </p>
+              </div>
+              <div>
+                <div className="text-xs font-bold tracking-wide text-soft uppercase">
+                  Celular
+                </div>
+                <p className="text-mute">
+                  Menu do navegador → <b>Adicionar à tela inicial</b>.
+                </p>
+              </div>
+            </div>
+
+            <p className="mt-4 text-[11px] leading-relaxed text-mute">
+              Precisa estar em <b>https</b> — no endereço do Render funciona, em localhost o
+              Chrome às vezes não oferece.
+            </p>
+
+            <button
+              onClick={() => setComoInstalar(false)}
+              className="mt-4 w-full rounded-lg bg-ink-400 py-2 text-sm font-medium text-bright transition hover:bg-ink-300"
+            >
+              Entendi
+            </button>
+          </div>
+        </div>
+      )}
 
       {aberto && (
         <div
