@@ -8,6 +8,7 @@ import { createMixer, type Mixer } from '@/lib/mixer';
 import {
   applyContentHint,
   displayConstraints,
+  displaySurfaceOf,
   pushFrameRate,
   preferScreenCodecs,
   tuneScreenSender,
@@ -76,6 +77,8 @@ export function useVoice({ myId, peerIds, settings }: Params) {
   const [localScreen, setLocalScreen] = useState<MediaStream | null>(null);
   const [localCam, setLocalCam] = useState<MediaStream | null>(null);
   const [screenStats, setScreenStats] = useState<ScreenStats | null>(null);
+  /** explica o que aconteceu com o áudio da última transmissão iniciada */
+  const [screenAudioInfo, setScreenAudioInfo] = useState<string | null>(null);
   const [screenHasAudio, setScreenHasAudio] = useState(false);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, PeerStreams>>({});
   const [speaking, setSpeaking] = useState<Record<string, boolean>>({});
@@ -567,6 +570,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     screenStream.current = null;
     setLocalScreen(null);
     setScreenHasAudio(false);
+    setScreenAudioInfo(null);
     for (const peer of peers.current.values()) {
       void peer.screenVideoSender?.replaceTrack(null).catch(() => {});
       void peer.screenAudioSender?.replaceTrack(null).catch(() => {});
@@ -670,12 +674,44 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     try {
       const preset = cfg.current.screenPreset;
       const fps = cfg.current.screenFps;
-      const stream = await navigator.mediaDevices.getDisplayMedia(displayConstraints(preset, fps));
+      const modoAudio = cfg.current.screenAudio;
+      const stream = await navigator.mediaDevices.getDisplayMedia(
+        displayConstraints(preset, fps, modoAudio)
+      );
       screenStream.current = stream;
       setLocalScreen(stream);
 
       const video = stream.getVideoTracks()[0];
-      const audio = stream.getAudioTracks()[0];
+      let audio = stream.getAudioTracks()[0];
+
+      /*
+       * Nenhum navegador consegue isolar o áudio de UMA janela: o sistema
+       * operacional não expõe áudio por processo. Se o usuário escolheu uma
+       * janela e ainda assim veio áudio, esse áudio é do sistema inteiro —
+       * ou seja, o som errado. Descartamos, em vez de transmitir tudo.
+       */
+      const superficie = video ? displaySurfaceOf(video) : null;
+      if (audio && superficie === 'window' && modoAudio !== 'system') {
+        audio.stop();
+        stream.removeTrack(audio);
+        audio = stream.getAudioTracks()[0];
+        setScreenAudioInfo(
+          'Janela compartilhada sem áudio: não existe forma de capturar só o som de uma janela. Para levar o som junto, compartilhe uma aba do Chrome.'
+        );
+      } else if (!audio && modoAudio !== 'none') {
+        setScreenAudioInfo(
+          superficie === 'monitor'
+            ? 'Transmitindo sem som. Para incluir o som do sistema, mude o modo de áudio nas configurações.'
+            : 'Transmitindo sem som — a origem escolhida não ofereceu áudio.'
+        );
+      } else if (audio && superficie === 'monitor') {
+        setScreenAudioInfo(
+          'Transmitindo o som do sistema inteiro, inclusive o da própria chamada. Compartilhe uma aba se quiser só o som dela.'
+        );
+      } else {
+        setScreenAudioInfo(null);
+      }
+
       setScreenHasAudio(!!audio);
       if (video) {
         applyContentHint(video, preset);
@@ -830,6 +866,8 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     localScreen,
     localCam,
     screenStats,
+    screenAudioInfo,
+    dismissScreenAudioInfo: () => setScreenAudioInfo(null),
     screenHasAudio,
     remoteStreams,
     speaking,

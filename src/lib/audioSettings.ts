@@ -23,6 +23,14 @@ export type AudioSettings = {
   screenPreset: 'detail' | 'motion';
   /** taxa de quadros pedida na captura de tela */
   screenFps: 30 | 60;
+  /**
+   * O que capturar de áudio ao transmitir:
+   * - 'tab': só o som da aba escolhida (preciso; nenhum outro som vaza)
+   * - 'system': som do sistema inteiro (necessário para jogos e apps de fora
+   *   do navegador, mas captura TUDO, inclusive a própria chamada)
+   * - 'none': sem áudio
+   */
+  screenAudio: 'tab' | 'system' | 'none';
   /** 0-100: volume do arquivo de música tocado direto na chamada */
   musicVolume: number;
   /** '' = câmera padrão do sistema */
@@ -41,6 +49,7 @@ export const DEFAULT_SETTINGS: AudioSettings = {
   sfxVolume: 60,
   screenPreset: 'detail',
   screenFps: 60,
+  screenAudio: 'tab',
   musicVolume: 70,
   videoDeviceId: '',
 };

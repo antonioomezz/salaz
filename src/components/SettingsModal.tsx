@@ -236,7 +236,45 @@ export function SettingsModal({
                 </button>
               ))}
             </div>
-            <div className="mt-3 flex items-center gap-2">
+            <div className="mt-4">
+              <span className="mb-1.5 block text-[11px] text-mute">Som da transmissão</span>
+              <div className="space-y-1">
+                {(
+                  [
+                    ['tab', 'Só da aba compartilhada', 'Preciso: nenhum outro som vaza. Compartilhe como aba do Chrome.'],
+                    ['system', 'Do sistema inteiro', 'Para jogos e apps fora do navegador. Captura TUDO, inclusive esta chamada.'],
+                    ['none', 'Sem som', 'Transmite só a imagem.'],
+                  ] as const
+                ).map(([valor, titulo, desc]) => (
+                  <button
+                    key={valor}
+                    onClick={() => set('screenAudio', valor)}
+                    className={`flex w-full items-start gap-2 rounded p-2 text-left transition ${
+                      settings.screenAudio === valor
+                        ? 'bg-blurple text-white'
+                        : 'bg-ink-400 text-bright hover:bg-ink-300'
+                    }`}
+                  >
+                    <span
+                      className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
+                        settings.screenAudio === valor ? 'bg-white' : 'bg-ink-200'
+                      }`}
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-xs font-semibold">{titulo}</span>
+                      <span className="block text-[10px] leading-tight opacity-80">{desc}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-2 text-[10px] leading-tight text-mute">
+                Não existe como capturar o som de uma <b>janela</b> isolada — nenhum navegador
+                faz isso, porque o sistema não expõe áudio por aplicativo. Se precisa levar o
+                som junto, compartilhe uma <b>aba</b>.
+              </p>
+            </div>
+
+            <div className="mt-4 flex items-center gap-2">
               <span className="text-[11px] text-mute">Taxa de quadros</span>
               {([30, 60] as const).map((f) => (
                 <button

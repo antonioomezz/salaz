@@ -15,6 +15,16 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
+    version: '0.10.0',
+    date: '24/08',
+    headline: 'Som da transmissão sob controle',
+    changes: [
+      'Ao compartilhar uma janela, o som do sistema não vaza mais junto — nenhum navegador consegue isolar o áudio de uma janela, então esse áudio é descartado em vez de transmitido.',
+      'Nova escolha nas configurações: som só da aba (padrão), do sistema inteiro, ou sem som.',
+      'Um aviso na sala explica o que aconteceu com o áudio ao começar a transmitir.',
+    ],
+  },
+  {
     version: '0.9.1',
     date: '24/08',
     headline: 'Controle de volume finalmente visível',

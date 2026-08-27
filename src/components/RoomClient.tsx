@@ -375,6 +375,18 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
           </div>
         )}
 
+        {voice.screenAudioInfo && (
+          <div className="flex items-center gap-3 border-b border-blurple/40 bg-blurple/15 px-4 py-2 text-sm text-soft">
+            <span className="flex-1">{voice.screenAudioInfo}</span>
+            <button
+              onClick={voice.dismissScreenAudioInfo}
+              className="shrink-0 text-xs underline"
+            >
+              ok
+            </button>
+          </div>
+        )}
+
         {voice.inVoice && !voice.micLive && !voice.error && (
           <div className="border-b border-amber-500/40 bg-amber-500/15 px-4 py-2 text-sm text-amber-300">
             Seu microfone parou de responder — reconectando ele automaticamente...

@@ -6,7 +6,13 @@ export type ScreenPreset = 'detail' | 'motion';
  * Constraints de captura. Os campos além de video/audio são recentes e
  * ignorados em silêncio por navegadores que não os conhecem.
  */
-export function displayConstraints(preset: ScreenPreset, fps: number): DisplayMediaStreamOptions {
+export type ScreenAudio = 'tab' | 'system' | 'none';
+
+export function displayConstraints(
+  preset: ScreenPreset,
+  fps: number,
+  screenAudio: ScreenAudio
+): DisplayMediaStreamOptions {
   return {
     video: {
       width: { ideal: 1920 },
@@ -15,16 +21,17 @@ export function displayConstraints(preset: ScreenPreset, fps: number): DisplayMe
       // menos. Quadro não capturado não se recupera depois.
       frameRate: { ideal: fps },
     },
-    audio: {
-      echoCancellation: false,
-      noiseSuppression: false,
-      autoGainControl: false,
-    },
+    audio:
+      screenAudio === 'none'
+        ? false
+        : { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
     // trocar a aba compartilhada sem reiniciar a transmissão
     surfaceSwitching: 'include',
     // evita o efeito espelho ao compartilhar a própria aba do Negoneycord
     selfBrowserSurface: 'exclude',
-    systemAudio: 'include',
+    // 'exclude' impede o Chrome de oferecer o som do sistema inteiro; com isso
+    // sobra só o áudio da aba, que é o único que dá para isolar de verdade
+    systemAudio: screenAudio === 'system' ? 'include' : 'exclude',
     monitorTypeSurfaces: 'include',
   } as DisplayMediaStreamOptions;
 }
@@ -138,5 +145,18 @@ export async function pushFrameRate(track: MediaStreamTrack, fps: number) {
     await track.applyConstraints({ frameRate: { ideal: fps } });
   } catch {
     /* o capturador não aceitou; segue no que conseguir */
+  }
+}
+
+/**
+ * Que tipo de superfície o usuário escolheu: 'browser' (aba), 'window'
+ * (janela) ou 'monitor' (tela inteira).
+ */
+export function displaySurfaceOf(track: MediaStreamTrack): string | null {
+  try {
+    return (track.getSettings() as MediaTrackSettings & { displaySurface?: string })
+      .displaySurface ?? null;
+  } catch {
+    return null;
   }
 }

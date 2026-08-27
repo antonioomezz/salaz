@@ -38,7 +38,12 @@ npm start
 3. Mande o link para os amigos. Quem abrir só precisa digitar o nome.
 4. Todo mundo conversa por texto na hora.
 5. Clique no canal de voz **🔊 Geral** para entrar na chamada (o navegador vai pedir permissão do microfone).
-6. Dentro da chamada, o botão **Tela** transmite tela inteira, janela ou aba — **com som**. Marque "compartilhar áudio" na janelinha do navegador; funciona melhor compartilhando uma aba do Chrome/Edge.
+6. Dentro da chamada, o botão **Tela** transmite tela inteira, janela ou aba. Para levar o som
+   junto, compartilhe uma **aba do Chrome** e marque "compartilhar áudio" — é a única forma de
+   capturar só o som daquele conteúdo. **Janela não tem áudio isolável** em navegador nenhum:
+   o sistema operacional não expõe áudio por aplicativo, então o Negoneycord descarta esse
+   áudio em vez de transmitir o som do computador inteiro. Quem precisa do som de um jogo pode
+   escolher "do sistema inteiro" nas configurações, ciente de que isso captura tudo.
 7. O botão **Câmera** liga a webcam. Câmera e tela funcionam ao mesmo tempo e aparecem como
    quadros separados.
 8. Botões de microfone, fone (silenciar todos), configurações e sair da chamada ficam no rodapé da barra lateral.
