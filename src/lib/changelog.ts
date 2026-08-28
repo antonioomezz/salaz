@@ -15,6 +15,16 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
+    version: '0.14.0',
+    date: '27/08',
+    headline: 'Aplicativo de verdade para Windows',
+    changes: [
+      'Agora existe um Negoneycord.exe — janela própria, ícone na barra de tarefas, independente do navegador.',
+      'É portátil: extrai a pasta e roda, sem instalar nada no sistema.',
+      'O botão no canto virou Baixar e leva ao aplicativo.',
+    ],
+  },
+  {
     version: '0.13.1',
     date: '24/08',
     headline: 'Botão Instalar e foto funcionando',

@@ -16,6 +16,9 @@ type PromptDeInstalacao = Event & {
   userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
 };
 
+/** Onde o app de desktop é publicado. */
+const LINK_DOWNLOAD = 'https://github.com/antonioomezz/salaz/releases/latest';
+
 export function VersionBadge() {
   const [aberto, setAberto] = useState(false);
   const [instalar, setInstalar] = useState<PromptDeInstalacao | null>(null);
@@ -66,24 +69,12 @@ export function VersionBadge() {
       <div className="fixed right-3 bottom-3 z-40 flex items-center gap-1.5 opacity-60 transition hover:opacity-100">
         {!instalado && (
           <button
-            onClick={async () => {
-              // o navegador nem sempre oferece a instalação automática:
-              // Firefox e Safari nunca, e o Chrome só depois de algum uso.
-              // Sem o atalho, explicamos o caminho manual.
-              if (!instalar) {
-                setComoInstalar(true);
-                return;
-              }
-              await instalar.prompt();
-              const { outcome } = await instalar.userChoice;
-              if (outcome === 'accepted') setInstaladoAgora(true);
-              setInstalar(null);
-            }}
-            title="Instalar o Negoneycord como aplicativo, com ícone próprio"
+            onClick={() => setComoInstalar(true)}
+            title="Baixar o Negoneycord para Windows"
             className="flex items-center gap-1.5 rounded-full bg-blurple px-2.5 py-1 text-[10px] font-semibold text-white shadow-lg shadow-blurple/25 transition hover:bg-blurple-dark"
           >
             <Download className="h-3 w-3" />
-            Instalar
+            Baixar
           </button>
         )}
         <button
@@ -104,37 +95,35 @@ export function VersionBadge() {
             className="w-full max-w-sm rounded-xl bg-ink-500 p-6 shadow-2xl ring-1 ring-white/5"
             onClick={(e) => e.stopPropagation()}
           >
-            <h2 className="mb-1 text-base font-bold text-white">Instalar o Negoneycord</h2>
+            <h2 className="mb-1 text-base font-bold text-white">Baixar o Negoneycord</h2>
             <p className="mb-4 text-xs leading-relaxed text-mute">
-              Seu navegador não ofereceu a instalação automática agora. Dá para fazer pelo menu
-              dele:
+              Aplicativo para Windows, em janela própria e sem barra de navegador.
             </p>
 
-            <div className="space-y-3 text-[13px] leading-snug text-bright">
-              <div>
-                <div className="text-xs font-bold tracking-wide text-soft uppercase">
-                  Chrome e Edge
-                </div>
-                <p className="text-mute">
-                  Menu <b>⋮</b> → <b>Transmitir, salvar e compartilhar</b> →{' '}
-                  <b>Instalar página como aplicativo</b>. Ou clique no ícone de instalação na barra
-                  de endereço.
-                </p>
+            <a
+              href={LINK_DOWNLOAD}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 rounded-lg bg-blurple py-2.5 text-sm font-semibold text-white shadow-lg shadow-blurple/25 transition hover:bg-blurple-dark"
+            >
+              <Download className="h-4 w-4" />
+              Baixar para Windows
+            </a>
+            <p className="mt-2 text-[11px] leading-relaxed text-mute">
+              É uma pasta compactada: extraia e rode o <b>Negoneycord.exe</b>. Não instala nada no
+              sistema. Na primeira vez o Windows pode avisar que protegeu seu PC — clique em{' '}
+              <b>Mais informações</b> e depois em <b>Executar assim mesmo</b>.
+            </p>
+
+            <div className="mt-5 border-t border-ink-400 pt-4">
+              <div className="mb-1.5 text-xs font-bold tracking-wide text-soft uppercase">
+                Ou instale pelo navegador
               </div>
-              <div>
-                <div className="text-xs font-bold tracking-wide text-soft uppercase">
-                  Celular
-                </div>
-                <p className="text-mute">
-                  Menu do navegador → <b>Adicionar à tela inicial</b>.
-                </p>
-              </div>
+              <p className="text-[13px] leading-snug text-mute">
+                No Chrome ou Edge: menu <b>⋮</b> → <b>Transmitir, salvar e compartilhar</b> →{' '}
+                <b>Instalar página como aplicativo</b>. No celular: <b>Adicionar à tela inicial</b>.
+              </p>
             </div>
-
-            <p className="mt-4 text-[11px] leading-relaxed text-mute">
-              Precisa estar em <b>https</b> — no endereço do Render funciona, em localhost o
-              Chrome às vezes não oferece.
-            </p>
 
             <button
               onClick={() => setComoInstalar(false)}
