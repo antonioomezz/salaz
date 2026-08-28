@@ -1,0 +1,15 @@
+{
+  "name": "negoneycord-desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Negoneycord como aplicativo de desktop",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-packager . Negoneycord --platform=win32 --arch=x64 --icon=icon.ico --out=dist --overwrite --app-version=0.1.0 --ignore=\"^/dist\" --ignore=\"^/gerar\""
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^33.2.0"
+  }
+}
