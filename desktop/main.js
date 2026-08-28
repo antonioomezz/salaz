@@ -9,8 +9,9 @@
  * barra de endereço, ícone na barra de tarefas e as permissões de mídia já
  * concedidas.
  */
-const { app, BrowserWindow, session, shell, desktopCapturer } = require('electron');
+const { app, BrowserWindow, session, shell, desktopCapturer, ipcMain } = require('electron');
 const path = require('path');
+const { abrirSeletor } = require('./seletor');
 
 const URL_PADRAO = 'https://salaz-s87d.onrender.com';
 const endereco = process.env.NEGONEYCORD_URL || URL_PADRAO;
@@ -51,20 +52,43 @@ function configurarPermissoes(ses) {
    * Sem isto o compartilhamento de tela NÃO funciona no Electron: o
    * getDisplayMedia do site fica sem resposta, porque não existe o seletor
    * nativo do Chrome aqui dentro.
+   *
+   * O seletor é nosso, e não do sistema, porque precisamos decidir o áudio
+   * conforme a escolha: tela inteira leva o som do sistema, janela não leva
+   * (o Windows não deixa isolar o som de uma janela sem componente nativo).
    */
-  ses.setDisplayMediaRequestHandler(
-    (request, callback) => {
-      desktopCapturer
-        .getSources({ types: ['screen', 'window'] })
-        .then((fontes) => {
-          // useSystemPicker abaixo cuida do caso normal; isto é a reserva
-          callback({ video: fontes[0], audio: 'loopback' });
-        })
-        .catch(() => callback({}));
-    },
-    // o seletor do próprio Windows, quando disponível, é bem melhor
-    { useSystemPicker: true }
-  );
+  ses.setDisplayMediaRequestHandler(async (request, callback) => {
+    try {
+      const fontes = await desktopCapturer.getSources({
+        types: ['screen', 'window'],
+        thumbnailSize: { width: 320, height: 200 },
+        fetchWindowIcons: true,
+      });
+
+      const escolha = await abrirSeletor(fontes);
+      if (!escolha) {
+        // usuário cancelou: devolver vazio é o jeito correto de recusar
+        callback({});
+        return;
+      }
+
+      const fonte = fontes.find((f) => f.id === escolha.id);
+      if (!fonte) {
+        callback({});
+        return;
+      }
+
+      /*
+       * 'loopback' captura o som do sistema inteiro. Só oferecemos em tela
+       * cheia: para janela ele traria TODO o som do computador, que é
+       * justamente o contrário do esperado.
+       */
+      callback(escolha.comAudio ? { video: fonte, audio: 'loopback' } : { video: fonte });
+    } catch (err) {
+      console.error('falha ao listar as fontes de tela:', err);
+      callback({});
+    }
+  });
 }
 
 function criarJanela() {

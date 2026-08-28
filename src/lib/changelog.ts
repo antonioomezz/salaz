@@ -15,6 +15,16 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
+    version: '0.15.0',
+    date: '27/08',
+    headline: 'Logo nova e fim da tela preta no app',
+    changes: [
+      'A arte do Negoneycord agora é a marca em todo lugar: telas de entrada, ícone do app e avatar do bot.',
+      'Tela preta no aplicativo: ele escolhia a primeira janela da lista sem perguntar nada, muitas vezes uma minimizada. Agora abre um seletor de verdade, com miniaturas.',
+      'Transmitir uma tela leva o som do computador junto; transmitir uma janela vai sem som, e o seletor avisa isso antes.',
+    ],
+  },
+  {
     version: '0.14.0',
     date: '27/08',
     headline: 'Aplicativo de verdade para Windows',
