@@ -15,29 +15,29 @@ export function displayConstraints(
 ): DisplayMediaStreamOptions {
   return {
     video: {
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
-      // sem 'max': limitar por cima faz alguns capturadores já entregarem
-      // menos. Quadro não capturado não se recupera depois.
-      frameRate: { ideal: fps },
+      width: { ideal: 1920, max: 1920 },
+      height: { ideal: 1080, max: 1080 },
+      // Não capturar acima da qualidade escolhida: poupa encoder e upload.
+      frameRate: { ideal: fps, max: fps },
     },
     audio:
       screenAudio === 'none'
         ? false
-        : { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
+        : { echoCancellation: false, noiseSuppression: false, autoGainControl: false, restrictOwnAudio: true, suppressLocalAudioPlayback: false },
     // trocar a aba compartilhada sem reiniciar a transmissão
     surfaceSwitching: 'include',
     // evita o efeito espelho ao compartilhar a própria aba do Negoneycord
     selfBrowserSurface: 'exclude',
     // 'exclude' impede o Chrome de oferecer o som do sistema inteiro; com isso
     // sobra só o áudio da aba, que é o único que dá para isolar de verdade
-    systemAudio: screenAudio === 'system' ? 'include' : 'exclude',
+    systemAudio: 'exclude',
+    windowAudio: 'exclude',
     monitorTypeSurfaces: 'include',
   } as DisplayMediaStreamOptions;
 }
 
 /**
- * VP9 primeiro nos dois presets: comprime tela muito bem e tem suporte amplo.
+ * VP9 para detalhe; H264 primeiro para movimento, favorecendo o encoder de hardware.
  *
  * O AV1 fica por último de propósito. Ele comprime melhor no papel, mas quase
  * sempre é codificado por SOFTWARE — a 1080p o codificador não dá conta, para
@@ -46,7 +46,7 @@ export function displayConstraints(
  */
 const ORDEM: Record<ScreenPreset, string[]> = {
   detail: ['video/VP9', 'video/VP8', 'video/H264', 'video/AV1'],
-  motion: ['video/VP9', 'video/H264', 'video/VP8', 'video/AV1'],
+  motion: ['video/H264', 'video/VP8', 'video/VP9', 'video/AV1'],
 };
 
 /** Última tentativa quando nada é codificado: H264 tem encoder de hardware quase sempre. */
@@ -153,7 +153,7 @@ export function applyContentHint(track: MediaStreamTrack, preset: ScreenPreset) 
  */
 export async function pushFrameRate(track: MediaStreamTrack, fps: number) {
   try {
-    await track.applyConstraints({ frameRate: { ideal: fps } });
+    await track.applyConstraints({ width: { max: 1920 }, height: { max: 1080 }, frameRate: { ideal: fps, max: fps } });
   } catch {
     /* o capturador não aceitou; segue no que conseguir */
   }

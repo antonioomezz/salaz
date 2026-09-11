@@ -23,8 +23,17 @@ type Peer = {
   camSender: RTCRtpSender | null;
   screenVideoSender: RTCRtpSender | null;
   screenAudioSender: RTCRtpSender | null;
-  /** candidatos que chegaram antes da descrição remota; aplicados depois */
+  /** candidatos ainda sem descrição remota compatível; aplicados depois */
   pendingCandidates: RTCIceCandidateInit[];
+  /**
+   * Sinalização é tratada uma de cada vez. Sem isso um candidato chega no meio
+   * do await de uma descrição, é aplicado contra a negociação antiga e o
+   * navegador o descarta com "Error processing ICE" — metade dos candidatos
+   * sumia assim, e quando sumia a metade errada a conexão não fechava.
+   */
+  fila: Promise<void>;
+  remoteKinds: Record<string, string>;
+  isSettingRemoteAnswer: boolean;
 };
 
 /**
@@ -85,6 +94,24 @@ export function useVoice({ myId, peerIds, settings }: Params) {
   const [inputLevel, setInputLevel] = useState(0);
 
   const inVoice = voiceChannel !== null;
+  const sessionEpoch = useRef(0);
+  const screenEpoch = useRef(0);
+  const cameraEpoch = useRef(0);
+  const joining = useRef(false);
+  const capturing = useRef(false);
+  const cameraPending = useRef(false);
+  const [screenStarting, setScreenStarting] = useState(false);
+  const captureAbort = useRef<AbortController | null>(null);
+  const micBeforeDeafen = useRef(true);
+  const earlySignals = useRef(new Map<string, Array<{ description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit; streams?: Record<string, string> }>>());
+  const signalHandler = useRef<(packet: {from: string; data: { description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit; streams?: Record<string, string> }}) => void>(() => {});
+  const streamKinds = () => {
+    const kinds: Record<string, string> = {};
+    if (micStream.current) kinds[micStream.current.id] = 'mic';
+    if (camStream.current) kinds[camStream.current.id] = 'cam';
+    if (screenStream.current) kinds[screenStream.current.id] = 'screen';
+    return kinds;
+  };
 
   // configurações mais recentes, sem re-registrar callbacks a cada mudança
   const cfg = useRef(settings);
@@ -275,7 +302,9 @@ export function useVoice({ myId, peerIds, settings }: Params) {
 
   /** Captura o microfone e prepara a track de saída. */
   const acquireMic = useCallback(async () => {
+    const epoch = sessionEpoch.current;
     const stream = await navigator.mediaDevices.getUserMedia(micConstraints(cfg.current));
+    if (epoch !== sessionEpoch.current) { stream.getTracks().forEach(t => t.stop()); throw new Error('Chamada encerrada'); }
     const raw = stream.getAudioTracks()[0];
     if (!raw) throw new Error('sem track de áudio');
 
@@ -408,7 +437,6 @@ export function useVoice({ myId, peerIds, settings }: Params) {
       jaCaiuParaSeguro.current = false;
       return;
     }
-    let ultimoFrames = -1;
     let paradoDesde = 0;
 
     const timer = setInterval(async () => {
@@ -421,8 +449,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
           if (st.type === 'outbound-rtp' && st.kind === 'video') frames = st.framesSent ?? 0;
         });
 
-        const parado = frames === 0 || frames === ultimoFrames;
-        ultimoFrames = frames;
+        const parado = frames === 0; // Tela estática pode parar de gerar quadros sem ser falha.
 
         if (!parado) {
           paradoDesde = 0;
@@ -481,55 +508,77 @@ export function useVoice({ myId, peerIds, settings }: Params) {
         polite: myId < id,
         makingOffer: false,
         ignoreOffer: false,
+        remoteKinds: {},
+        isSettingRemoteAnswer: false,
         micSender: null,
         camSender: null,
         screenVideoSender: null,
         screenAudioSender: null,
         pendingCandidates: [],
+        fila: Promise.resolve(),
       };
       peers.current.set(id, peer);
 
-      pc.onnegotiationneeded = async () => {
-        try {
-          peer.makingOffer = true;
-          await pc.setLocalDescription();
-          socket.emit('signal', { to: id, data: { description: pc.localDescription } });
-        } catch (err) {
-          console.error('negociação falhou', err);
-        } finally {
-          peer.makingOffer = false;
-        }
+      /*
+       * Entra na mesma fila dos sinais que chegam. Fora dela, criar a oferta
+       * local corria junto com a oferta do outro lado e a conexão terminava
+       * com descrições de negociações diferentes — ficava em "new" para
+       * sempre, sem áudio nem imagem.
+       */
+      pc.onnegotiationneeded = () => {
+        peer.fila = peer.fila.then(async () => {
+          // se enquanto esperávamos a vez já entramos em outra negociação,
+          // não há oferta a fazer: quem chegou primeiro manda
+          if (pc.signalingState !== 'stable') return;
+          try {
+            peer.makingOffer = true;
+            await pc.setLocalDescription();
+            socket.emit('signal', { to: id, data: { description: pc.localDescription, streams: streamKinds() } });
+          } catch (err) {
+            console.error('negociação falhou', err);
+          } finally {
+            peer.makingOffer = false;
+          }
+        });
       };
 
       pc.onicecandidate = ({ candidate }) => {
         if (candidate) socket.emit('signal', { to: id, data: { candidate } });
       };
 
-      pc.ontrack = ({ streams }) => {
+      pc.ontrack = ({ streams, track }) => {
         const stream = streams[0];
         if (!stream) return;
-        setRemoteStreams((prev) => {
-          const antes = prev[id];
-          const mine: PeerStreams = { mic: antes?.mic, videos: [...(antes?.videos ?? [])] };
-          const jaTem = mine.videos.some((v) => v.id === stream.id);
-
-          if (stream.getVideoTracks().length > 0) {
-            if (!jaTem) mine.videos.push(stream);
-          } else if (!mine.mic || mine.mic.id === stream.id) {
-            // primeira stream só de áudio = microfone
-            mine.mic = stream;
-          } else if (!jaTem) {
-            // som da tela chegando antes do vídeo dela
-            mine.videos.push(stream);
-          }
-          return { ...prev, [id]: mine };
-        });
-        if (stream.getVideoTracks().length === 0) watchLevel(id, stream);
+        // Conservar o tipo mesmo quando a próxima descrição remove esta tela.
+        let kind = peer.remoteKinds[stream.id];
+        const update = () => {
+          if (peers.current.get(id) !== peer) return;
+          kind ||= peer.remoteKinds[stream.id];
+          const isMic = kind === 'mic' || (!kind && stream.getVideoTracks().length === 0 && stream.getAudioTracks().some(t => t.readyState === 'live'));
+          setRemoteStreams(prev => {
+            const before = prev[id];
+            const videos = (before?.videos ?? []).filter(v => v.id !== stream.id && v.getTracks().some(t => t.readyState === 'live'));
+            if (!isMic && stream.getTracks().some(t => t.readyState === 'live')) videos.push(stream);
+            return { ...prev, [id]: { mic: isMic ? stream : before?.mic, videos } };
+          });
+          if (isMic) watchLevel(id, stream);
+        };
+        track.addEventListener('unmute', update);
+        stream.addEventListener('addtrack', update);
+        stream.addEventListener('removetrack', update);
+        update();
       };
 
       pc.onconnectionstatechange = () => {
         if (pc.connectionState === 'failed') pc.restartIce();
+        if (pc.connectionState === 'connected' && peer.screenVideoSender) {
+          afinarEnvioDeTela(pc, peer.screenVideoSender);
+        }
       };
+
+      const pending = earlySignals.current.get(id);
+      earlySignals.current.delete(id);
+      if (pending) queueMicrotask(() => pending.forEach(data => signalHandler.current({from:id, data})));
 
       // tracks entram depois dos handlers para a renegociação ser capturada
       if (outgoingMic.current && micStream.current) {
@@ -573,47 +622,59 @@ export function useVoice({ myId, peerIds, settings }: Params) {
   useEffect(() => {
     const socket = getSocket();
 
-    const onSignal = async ({
-      from,
-      data,
-    }: {
-      from: string;
-      data: { description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
-    }) => {
-      const peer = peers.current.get(from);
-      if (!peer) return;
+    type Sinal = {
+      description?: RTCSessionDescriptionInit;
+      candidate?: RTCIceCandidateInit;
+      streams?: Record<string, string>;
+    };
+
+    const processar = async (peer: Peer, from: string, data: Sinal) => {
       const { pc } = peer;
 
       try {
         if (data.description) {
           const collision =
-            data.description.type === 'offer' && (peer.makingOffer || pc.signalingState !== 'stable');
+            data.description.type === 'offer' && (peer.makingOffer || (pc.signalingState !== 'stable' && !peer.isSettingRemoteAnswer));
           peer.ignoreOffer = !peer.polite && collision;
           if (peer.ignoreOffer) return;
 
-          await pc.setRemoteDescription(data.description);
+          if (data.streams) peer.remoteKinds = data.streams;
+          peer.isSettingRemoteAnswer = data.description.type === 'answer';
+          try { await pc.setRemoteDescription(data.description); }
+          finally { peer.isSettingRemoteAnswer = false; }
 
           // agora que existe descrição remota, aplica o que ficou na fila
           const queued = peer.pendingCandidates.splice(0);
           for (const candidate of queued) {
-            await pc.addIceCandidate(candidate).catch(() => {});
+            // o que ainda não servir volta para a fila: descartar aqui foi
+            // exatamente o que deixava a conexão presa em "new"
+            await pc.addIceCandidate(candidate).catch(() => {
+              if (peer.pendingCandidates.length < 100) peer.pendingCandidates.push(candidate);
+            });
           }
 
           if (data.description.type === 'offer') {
             await pc.setLocalDescription();
-            socket.emit('signal', { to: from, data: { description: pc.localDescription } });
+            socket.emit('signal', { to: from, data: { description: pc.localDescription, streams: streamKinds() } });
+          }
+          if (peer.screenVideoSender) {
+            void tuneScreenSender(peer.screenVideoSender, cfg.current.screenPreset, peers.current.size, cfg.current.screenFps);
           }
         } else if (data.candidate) {
+          if (peer.ignoreOffer) return;
           // candidato pode chegar antes da oferta/resposta: guarda para depois,
           // senão a conexão fica presa em "new" e ninguém se ouve
           if (!pc.remoteDescription) {
-            peer.pendingCandidates.push(data.candidate);
+            if (peer.pendingCandidates.length < 100) peer.pendingCandidates.push(data.candidate);
             return;
           }
           try {
             await pc.addIceCandidate(data.candidate);
           } catch (err) {
-            if (!peer.ignoreOffer) throw err;
+            // pode ser de uma renegociação que ainda não aplicamos: guarda em
+            // vez de descartar, e tenta de novo na próxima descrição remota
+            if (peer.pendingCandidates.length < 100) peer.pendingCandidates.push(data.candidate);
+            if (!peer.ignoreOffer) console.warn('candidato adiado', err);
           }
         }
       } catch (err) {
@@ -621,6 +682,23 @@ export function useVoice({ myId, peerIds, settings }: Params) {
       }
     };
 
+    /*
+     * Cada participante tem sua própria fila: os sinais dele são tratados um
+     * de cada vez. Antes o handler era async e várias entregas corriam juntas,
+     * então um candidato podia ser aplicado no meio da troca de descrição e
+     * era descartado pelo navegador.
+     */
+    const onSignal = ({ from, data }: { from: string; data: Sinal }) => {
+      const peer = peers.current.get(from);
+      if (!peer) {
+        const queue = earlySignals.current.get(from) ?? [];
+        if (earlySignals.current.size < 16 && queue.length < 100) { queue.push(data); earlySignals.current.set(from, queue); }
+        return;
+      }
+      peer.fila = peer.fila.then(() => processar(peer, from, data));
+    };
+
+    signalHandler.current = onSignal;
     socket.on('signal', onSignal);
     return () => {
       socket.off('signal', onSignal);
@@ -631,20 +709,26 @@ export function useVoice({ myId, peerIds, settings }: Params) {
   const joinVoice = useCallback(
     async (channelId: string) => {
       const socket = getSocket();
+      if (joining.current || !socket.connected) return;
+      joining.current = true;
+      const epoch = sessionEpoch.current;
       setError(null);
       setConnecting(true);
       try {
         if (!micStream.current) await acquireMic();
+        if (epoch !== sessionEpoch.current) return;
         if (rawMic.current) rawMic.current.enabled = true;
         if (outgoingMic.current) outgoingMic.current.enabled = true;
         setMicOn(true);
+        setDeafened(false);
         setMicLive(true);
         setVoiceChannel(channelId);
         socket.emit('voice:join', { channelId });
-        socket.emit('state', { muted: false, sharing: false });
+        socket.emit('state', { muted: false, deafened: false, sharing: !!screenStream.current, camOn: !!camStream.current, screenStreamId: screenStream.current?.id ?? null, camStreamId: camStream.current?.id ?? null });
       } catch {
         setError('Não consegui acessar o microfone. Libere a permissão no navegador e tente de novo.');
       } finally {
+        joining.current = false;
         setConnecting(false);
       }
     },
@@ -652,29 +736,39 @@ export function useVoice({ myId, peerIds, settings }: Params) {
   );
 
   const stopScreen = useCallback(() => {
+    screenEpoch.current++;
+    captureAbort.current?.abort();
+    captureAbort.current = null;
+    setScreenStats(null);
     screenStream.current?.getTracks().forEach((t) => t.stop());
     screenStream.current = null;
     setLocalScreen(null);
     setScreenHasAudio(false);
     setScreenAudioInfo(null);
     for (const peer of peers.current.values()) {
-      void peer.screenVideoSender?.replaceTrack(null).catch(() => {});
-      void peer.screenAudioSender?.replaceTrack(null).catch(() => {});
+      if (peer.screenVideoSender) peer.pc.removeTrack(peer.screenVideoSender);
+      if (peer.screenAudioSender) peer.pc.removeTrack(peer.screenAudioSender);
+      peer.screenVideoSender = null; peer.screenAudioSender = null;
     }
     getSocket().emit('state', { sharing: false, screenStreamId: null });
   }, []);
 
   const stopCam = useCallback(() => {
+    cameraEpoch.current++;
     camStream.current?.getTracks().forEach((t) => t.stop());
     camStream.current = null;
     setLocalCam(null);
     for (const peer of peers.current.values()) {
-      void peer.camSender?.replaceTrack(null).catch(() => {});
+      if (peer.camSender) peer.pc.removeTrack(peer.camSender);
+      peer.camSender = null;
     }
     getSocket().emit('state', { camOn: false, camStreamId: null });
   }, []);
 
   const startCam = useCallback(async () => {
+    if (!micStream.current || camStream.current || cameraPending.current) return;
+    cameraPending.current = true;
+    const epoch = cameraEpoch.current;
     try {
       const dev = cfg.current.videoDeviceId;
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -686,6 +780,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
         },
         audio: false,
       });
+      if (epoch !== cameraEpoch.current || !micStream.current) { stream.getTracks().forEach(t => t.stop()); return; }
       camStream.current = stream;
       setLocalCam(stream);
 
@@ -693,7 +788,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
       // rosto em movimento: fluidez importa mais que nitidez de detalhe
       applyContentHint(video, 'motion');
       // se o usuário desligar a câmera pelo sistema
-      video.addEventListener('ended', () => stopCam());
+      video.addEventListener('ended', () => { if (camStream.current === stream) stopCam(); });
 
       for (const peer of peers.current.values()) {
         if (peer.camSender) void peer.camSender.replaceTrack(video).catch(() => {});
@@ -703,7 +798,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
       getSocket().emit('state', { camOn: true, camStreamId: stream.id });
     } catch {
       setError('Não consegui acessar a câmera. Libere a permissão no navegador e tente de novo.');
-    }
+    } finally { cameraPending.current = false; }
   }, [stopCam]);
 
   const toggleCam = useCallback(() => {
@@ -712,6 +807,8 @@ export function useVoice({ myId, peerIds, settings }: Params) {
   }, [startCam, stopCam]);
 
   const leaveVoice = useCallback(() => {
+    sessionEpoch.current++;
+    earlySignals.current.clear();
     stopScreen();
     stopCam();
     for (const id of [...peers.current.keys()]) dropPeer(id);
@@ -725,6 +822,8 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     outgoingMic.current = null;
     if (myId) unwatchLevel(myId);
     setVoiceChannel(null);
+    setRemoteStreams({});
+    setSpeaking({});
     setDeafened(false);
     setInputLevel(0);
     getSocket().emit('voice:leave');
@@ -743,96 +842,75 @@ export function useVoice({ myId, peerIds, settings }: Params) {
 
   const toggleMic = useCallback(() => {
     if (!rawMic.current) return;
+    if (deafened) { setDeafened(false); getSocket().emit('state', { deafened: false }); }
     setMicEnabled(!rawMic.current.enabled);
-  }, [setMicEnabled]);
+  }, [setMicEnabled, deafened]);
 
   const toggleDeafen = useCallback(() => {
     const next = !deafened;
     setDeafened(next);
     if (next) {
+      micBeforeDeafen.current = micOn;
       if (rawMic.current) rawMic.current.enabled = false;
       if (outgoingMic.current) outgoingMic.current.enabled = false;
       setMicOn(false);
       getSocket().emit('state', { deafened: true, muted: true });
     } else {
+      setMicEnabled(micBeforeDeafen.current);
       getSocket().emit('state', { deafened: false });
     }
-  }, [deafened]);
+  }, [deafened, micOn, setMicEnabled]);
 
   const startScreen = useCallback(async () => {
-    const socket = getSocket();
+    if (!micStream.current || screenStream.current || capturing.current) return;
+    capturing.current = true;
+    setScreenStarting(true);
+    setError(null);
+    const epoch = screenEpoch.current;
+    const abort = new AbortController();
+    captureAbort.current = abort;
+    let stream: MediaStream | null = null;
     try {
-      const preset = cfg.current.screenPreset;
-      const fps = cfg.current.screenFps;
-      const modoAudio = cfg.current.screenAudio;
-      const stream = await navigator.mediaDevices.getDisplayMedia(
-        displayConstraints(preset, fps, modoAudio)
-      );
-      screenStream.current = stream;
-      setLocalScreen(stream);
-
+      const { screenPreset: preset, screenFps: fps, screenAudio: audioMode } = cfg.current;
+      stream = await navigator.mediaDevices.getDisplayMedia(displayConstraints(preset, fps, audioMode));
+      if (epoch !== screenEpoch.current || !micStream.current) { stream.getTracks().forEach(t => t.stop()); return; }
       const video = stream.getVideoTracks()[0];
-      let audio = stream.getAudioTracks()[0];
-
-      /*
-       * Nenhum navegador consegue isolar o áudio de UMA janela: o sistema
-       * operacional não expõe áudio por processo. Se o usuário escolheu uma
-       * janela e ainda assim veio áudio, esse áudio é do sistema inteiro —
-       * ou seja, o som errado. Descartamos, em vez de transmitir tudo.
-       */
-      const superficie = video ? displaySurfaceOf(video) : null;
-      if (audio && superficie === 'window' && modoAudio !== 'system') {
-        audio.stop();
-        stream.removeTrack(audio);
-        audio = stream.getAudioTracks()[0];
-        setScreenAudioInfo(
-          'Janela compartilhada sem áudio: não existe forma de capturar só o som de uma janela. Para levar o som junto, compartilhe uma aba do Chrome.'
-        );
-      } else if (!audio && modoAudio !== 'none') {
-        setScreenAudioInfo(
-          superficie === 'monitor'
-            ? 'Transmitindo sem som. Para incluir o som do sistema, mude o modo de áudio nas configurações.'
-            : 'Transmitindo sem som — a origem escolhida não ofereceu áudio.'
-        );
-      } else if (audio && superficie === 'monitor') {
-        setScreenAudioInfo(
-          'Transmitindo o som do sistema inteiro, inclusive o da própria chamada. Compartilhe uma aba se quiser só o som dela.'
-        );
-      } else {
-        setScreenAudioInfo(null);
+      if (!video) throw new Error('A origem não entregou vídeo');
+      let info: string | null = null;
+      const surface = displaySurfaceOf(video);
+      // Áudio global repete a chamada. Só conservar a faixa de uma aba isolada.
+      if (surface !== 'browser') {
+        stream.getAudioTracks().forEach(track => { track.stop(); stream!.removeTrack(track); });
       }
-
+      if (!stream.getAudioTracks().length && audioMode !== 'none') {
+        info = 'Transmitindo sem som. Para incluir áudio sem repetir a chamada, escolha uma aba do Chrome ou Edge e marque "Compartilhar áudio da aba".';
+      }
+      if (epoch !== screenEpoch.current || !micStream.current || video.readyState !== 'live') {
+        stream.getTracks().forEach(t => t.stop()); return;
+      }
+      const captured = stream;
+      screenStream.current = captured;
+      const audio = captured.getAudioTracks()[0];
+      setScreenAudioInfo(info);
       setScreenHasAudio(!!audio);
-      if (video) {
-        applyContentHint(video, preset);
-        // alguns capturadores só sobem a taxa se ela for reaplicada
-        void pushFrameRate(video, fps);
-      }
-
-      // botão nativo "parar compartilhamento" do navegador
-      video?.addEventListener('ended', () => stopScreen());
-
+      setLocalScreen(captured);
+      applyContentHint(video, preset);
+      await pushFrameRate(video, fps);
+      if (screenStream.current !== captured) return;
+      video.addEventListener('ended', () => { if (screenStream.current === captured) stopScreen(); });
       for (const peer of peers.current.values()) {
-        if (video) {
-          if (peer.screenVideoSender) void peer.screenVideoSender.replaceTrack(video).catch(() => {});
-          else peer.screenVideoSender = peer.pc.addTrack(video, stream);
-          afinarEnvioDeTela(peer.pc, peer.screenVideoSender);
-        }
-        if (audio) {
-          if (peer.screenAudioSender) void peer.screenAudioSender.replaceTrack(audio).catch(() => {});
-          else peer.screenAudioSender = peer.pc.addTrack(audio, stream);
-        }
+        peer.screenVideoSender = peer.pc.addTrack(video, captured);
+        afinarEnvioDeTela(peer.pc, peer.screenVideoSender);
+        if (audio) peer.screenAudioSender = peer.pc.addTrack(audio, captured);
       }
-      socket.emit('state', { sharing: true, screenStreamId: stream.id });
-
-      // capturar a tela pode derrubar o microfone no Windows: confere logo depois
-      setTimeout(() => {
-        const raw = rawMic.current;
-        if (raw && (raw.readyState === 'ended' || raw.muted)) void recoverRef.current();
-      }, 800);
-    } catch {
-      /* usuário fechou o seletor de tela */
-    }
+      getSocket().emit('state', { sharing: true, screenStreamId: captured.id });
+    } catch (err) {
+      if (stream && screenStream.current === stream) stopScreen();
+      stream?.getTracks().forEach(t => t.stop());
+      if (err instanceof DOMException && err.name === 'NotAllowedError') return;
+      if (abort.signal.aborted) return;
+      setError('Não foi possível iniciar a transmissão. Verifique a janela escolhida e tente novamente.');
+    } finally { capturing.current = false; setScreenStarting(false); }
   }, [stopScreen, afinarEnvioDeTela]);
 
   /**
@@ -885,6 +963,11 @@ export function useVoice({ myId, peerIds, settings }: Params) {
       cfg.current = next;
       if (!micStream.current) return;
 
+      if (next.screenFps !== previous.screenFps && screenStream.current) {
+        const video = screenStream.current.getVideoTracks()[0];
+        if (video) await pushFrameRate(video, next.screenFps);
+        reajustarBandaDaTela();
+      }
       if (next.screenPreset !== previous.screenPreset && screenStream.current) {
         const video = screenStream.current.getVideoTracks()[0];
         if (video) applyContentHint(video, next.screenPreset);
@@ -896,7 +979,8 @@ export function useVoice({ myId, peerIds, settings }: Params) {
         next.inputDeviceId !== previous.inputDeviceId ||
         next.echoCancellation !== previous.echoCancellation ||
         next.noiseSuppression !== previous.noiseSuppression ||
-        next.autoGainControl !== previous.autoGainControl;
+        next.autoGainControl !== previous.autoGainControl ||
+        next.voiceIsolation !== previous.voiceIsolation;
 
       try {
         if (precisaRecapturar) {
@@ -932,12 +1016,17 @@ export function useVoice({ myId, peerIds, settings }: Params) {
         setError('Não consegui aplicar as configurações de áudio nesse dispositivo.');
       }
     },
-    [acquireMic, buildOutgoing, pushMicToPeers, recriarEnvioDeTela]
+    [acquireMic, buildOutgoing, pushMicToPeers, recriarEnvioDeTela, reajustarBandaDaTela]
   );
 
   // encerra tudo ao desmontar
   useEffect(
     () => () => {
+      sessionEpoch.current++; screenEpoch.current++; cameraEpoch.current++;
+      captureAbort.current?.abort();
+        mixer.current?.destroy();
+      for (const item of analysers.current.values()) item.src.disconnect();
+      analysers.current.clear();
       for (const peer of peers.current.values()) peer.pc.close();
       peers.current.clear();
       micStream.current?.getTracks().forEach((t) => t.stop());
@@ -967,6 +1056,7 @@ export function useVoice({ myId, peerIds, settings }: Params) {
     screenAudioInfo,
     dismissScreenAudioInfo: () => setScreenAudioInfo(null),
     screenHasAudio,
+    screenStarting,
     remoteStreams,
     speaking,
     inputLevel,

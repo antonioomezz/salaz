@@ -15,6 +15,18 @@ export type Release = {
 
 export const RELEASES: Release[] = [
   {
+    version: '0.16.0',
+    date: '01/09',
+    headline: 'Quem entra no meio da transmissão passa a ver',
+    changes: [
+      'Entrar numa chamada onde alguém já transmitia falhava de forma intermitente: metade dos candidatos de conexão era descartada, e quando a metade errada se perdia nada chegava — nem imagem, nem voz.',
+      'Causa: os sinais de conexão eram tratados em paralelo, então um candidato era aplicado no meio da troca de negociação e o navegador o rejeitava.',
+      'Agora cada participante tem uma fila e os sinais entram um de cada vez; o que não serve na hora é guardado e reaplicado, em vez de sumir.',
+      'Tela cheia voltou a funcionar no aplicativo: ele estava negando a permissão, e o botão não respondia a nada. Dois cliques na imagem também alternam.',
+      'A escolha do dispositivo de saída também estava sendo ignorada dentro do aplicativo, pelo mesmo motivo.',
+    ],
+  },
+  {
     version: '0.15.0',
     date: '27/08',
     headline: 'Logo nova e fim da tela preta no app',

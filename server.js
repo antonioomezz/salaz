@@ -513,6 +513,7 @@ app.prepare().then(() => {
       const room = roomId && rooms.get(roomId);
       const user = me();
       if (!room || !user) return;
+      if (!room.channels.some((channel) => channel.id === channelId && channel.type === 'voice')) return;
       user.voiceChannel = String(channelId);
       broadcastUsers(io, room);
     });
@@ -549,6 +550,10 @@ app.prepare().then(() => {
     // --- sinalização WebRTC: repassa cru para o destinatário ---
     socket.on('signal', ({ to, data } = {}) => {
       if (!to || !roomId) return;
+      const room = rooms.get(roomId);
+      const source = room?.users.get(socket.id);
+      const target = room?.users.get(to);
+      if (!source?.voiceChannel || target?.voiceChannel !== source.voiceChannel) return;
       io.to(to).emit('signal', { from: socket.id, data });
     });
 

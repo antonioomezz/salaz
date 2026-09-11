@@ -66,7 +66,7 @@ export function VersionBadge() {
 
   return (
     <>
-      <div className="fixed right-3 bottom-3 z-40 flex items-center gap-1.5 opacity-60 transition hover:opacity-100">
+      <div className="version-badge fixed right-3 bottom-3 z-40 flex items-center gap-1.5 opacity-60 transition hover:opacity-100">
         {!instalado && (
           <button
             onClick={() => setComoInstalar(true)}

@@ -5,7 +5,7 @@ import type { Channel, Message } from '@/lib/types';
 import { compressImage, isImageFile, type CompressedImage } from '@/lib/imageCompress';
 import { Avatar } from './Avatar';
 import { BotAvatar } from './Brand';
-import { Clip, Send } from './icons';
+import { Clip, Hash, Send } from './icons';
 
 const time = (ts: number) =>
   new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
@@ -14,33 +14,48 @@ type Props = {
   channel: Channel | undefined;
   messages: Message[];
   onSend: (text: string, image?: CompressedImage) => void;
+  connected: boolean;
 };
 
-export function Chat({ channel, messages, onSend }: Props) {
+export function Chat({ channel, messages, onSend, connected }: Props) {
   const [draft, setDraft] = useState('');
   const [anexo, setAnexo] = useState<CompressedImage | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [arrastando, setArrastando] = useState(false);
   const [ampliada, setAmpliada] = useState<string | null>(null);
+  const [preparing, setPreparing] = useState(false);
+  const [nearBottom, setNearBottom] = useState(true);
 
   const bottom = useRef<HTMLDivElement>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
+  const textInput = useRef<HTMLTextAreaElement>(null);
+  const imageDialog = useRef<HTMLDialogElement>(null);
+  const followMessages = useRef(true);
+  const imageRequest = useRef(0);
+
+  useEffect(() => () => { imageRequest.current++; }, []);
+
+  useEffect(() => {
+    if (ampliada) imageDialog.current?.showModal();
+  }, [ampliada]);
 
   useEffect(() => {
     const box = scroller.current;
     if (!box) return;
-    const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 250;
-    if (nearBottom || messages.length <= 1) bottom.current?.scrollIntoView({ block: 'end' });
+    if (followMessages.current) box.scrollTop = box.scrollHeight;
   }, [messages]);
 
   const receberArquivo = async (file: Blob) => {
     setErro(null);
+    setPreparing(true);
+    const request = ++imageRequest.current;
     try {
-      setAnexo(await compressImage(file));
+      const image = await compressImage(file);
+      if (request === imageRequest.current) setAnexo(image);
     } catch {
-      setErro('Não consegui preparar essa imagem. Tente uma menor.');
-    }
+      if (request === imageRequest.current) setErro('Não consegui preparar essa imagem. Tente uma menor.');
+    } finally { if (request === imageRequest.current) setPreparing(false); }
   };
 
   // colar imagem com Ctrl+V em qualquer lugar do chat
@@ -54,10 +69,13 @@ export function Chat({ channel, messages, onSend }: Props) {
 
   const send = () => {
     const text = draft.trim();
-    if (!text && !anexo) return;
+    if ((!text && !anexo) || !connected || preparing || !channel) return;
+    followMessages.current = true;
     onSend(text, anexo ?? undefined);
     setDraft('');
     setAnexo(null);
+    if (textInput.current) textInput.current.style.height = 'auto';
+    textInput.current?.focus();
   };
 
   return (
@@ -83,11 +101,12 @@ export function Chat({ channel, messages, onSend }: Props) {
         </div>
       )}
 
-      <div ref={scroller} className="flex-1 overflow-y-auto px-4 pt-4">
-        <div className="mb-6 border-b border-ink-400 pb-4">
-          <h2 className="text-2xl font-bold text-white">Bem-vindo a #{channel?.name ?? '...'}</h2>
-          <p className="text-sm text-mute">
-            Este é o começo do canal. Manda ver — pode colar imagem com Ctrl+V.
+      <div ref={scroller} onScroll={(e) => { const box = e.currentTarget; const near = box.scrollHeight - box.scrollTop - box.clientHeight < 100; followMessages.current = near; setNearBottom(near); }} className="min-h-0 flex-1 overflow-y-auto px-4 pt-6 sm:px-6" role="log" aria-label={`Mensagens em ${channel?.name ?? 'conversa'}`} aria-live="polite" aria-relevant="additions">
+        <div className="mb-7 pb-2">
+          <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl border border-white/6 bg-ink-400/40 text-soft"><Hash className="h-6 w-6" /></div>
+          <h2 className="text-[22px] font-semibold tracking-tight text-white">{channel?.name ?? 'Conectando…'}</h2>
+          <p className="mt-1 text-sm text-mute">
+            {messages.length ? 'O começo da conversa.' : 'Tudo pronto. Quem puxa o primeiro assunto?'}
           </p>
         </div>
 
@@ -98,7 +117,7 @@ export function Chat({ channel, messages, onSend }: Props) {
             !ehBot && prev && prev.userId === m.userId && prev.kind !== 'bot' && m.ts - prev.ts < 5 * 60_000;
 
           return (
-            <div key={m.id} className={`pop-in flex gap-3 px-1 ${grouped ? 'mt-0.5' : 'mt-4'}`}>
+            <div key={m.id} className={`chat-message pop-in flex gap-3 px-1 py-0.5 ${grouped ? 'mt-0.5' : 'mt-4'}`}>
               <div className="w-10 shrink-0">
                 {ehBot ? (
                   <BotAvatar size={40} />
@@ -110,7 +129,7 @@ export function Chat({ channel, messages, onSend }: Props) {
               <div className="min-w-0 flex-1">
                 {!grouped && (
                   <div className="flex items-baseline gap-2">
-                    <span className="font-semibold" style={{ color: ehBot ? '#5865f2' : m.color }}>
+                    <span className="truncate text-sm font-semibold" style={{ color: ehBot ? 'var(--color-online)' : m.color }}>
                       {ehBot ? 'Nego Ney' : m.name}
                     </span>
                     {ehBot && (
@@ -118,13 +137,13 @@ export function Chat({ channel, messages, onSend }: Props) {
                         BOT
                       </span>
                     )}
-                    <span className="text-[11px] text-mute">{time(m.ts)}</span>
+                    <time dateTime={new Date(m.ts).toISOString()} className="shrink-0 text-[10px] text-mute">{time(m.ts)}</time>
                   </div>
                 )}
 
                 {m.text && (
                   <p
-                    className={`text-[15px] leading-[1.4] break-words whitespace-pre-wrap ${
+                    className={`text-[14px] leading-[1.6] break-words whitespace-pre-wrap ${
                       m.kind === 'image' && !m.image?.dataUrl ? 'text-mute italic' : 'text-bright'
                     }`}
                   >
@@ -144,6 +163,7 @@ export function Chat({ channel, messages, onSend }: Props) {
                       width={m.image.w}
                       height={m.image.h}
                       className="h-auto w-full"
+                      onLoad={() => { if (followMessages.current && scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; }}
                     />
                   </button>
                 )}
@@ -156,11 +176,14 @@ export function Chat({ channel, messages, onSend }: Props) {
         <div ref={bottom} className="h-4" />
       </div>
 
+      {!nearBottom && messages.length > 0 && <button onClick={() => { followMessages.current = true; if (scroller.current) scroller.current.scrollTop = scroller.current.scrollHeight; }} className="absolute right-5 bottom-24 z-10 rounded-full border border-white/10 bg-ink-800 px-4 py-2 text-xs text-soft shadow-lg hover:text-white">Ir para as últimas mensagens ↓</button>}
+
       {erro && (
-        <div className="mx-4 mb-1 rounded bg-danger/15 px-3 py-1.5 text-xs text-danger">{erro}</div>
+        <div role="alert" className="mx-4 mb-1 rounded bg-danger/15 px-3 py-1.5 text-xs text-danger">{erro}</div>
       )}
 
-      <div className="px-4 pt-1 pb-5">
+      <div className="shrink-0 px-4 pt-2 pb-3 sm:px-6">
+        {preparing && <p role="status" className="mb-2 text-xs text-mute">Preparando imagem…</p>}
         {anexo && (
           <div className="mb-2 flex items-center gap-3 rounded-lg bg-ink-400 p-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -177,11 +200,13 @@ export function Chat({ channel, messages, onSend }: Props) {
           </div>
         )}
 
-        <div className="flex items-end gap-2 rounded-lg bg-ink-400 px-4 py-2.5">
+        <div className="chat-composer flex items-end gap-2 rounded-xl bg-ink-400/70 px-2 py-2">
           <button
             onClick={() => fileInput.current?.click()}
             title="Enviar imagem"
-            className="shrink-0 text-mute transition hover:text-white"
+            aria-label="Anexar imagem"
+            disabled={!connected || preparing}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-mute hover:bg-ink-300 hover:text-white disabled:opacity-30"
           >
             <Clip />
           </button>
@@ -197,42 +222,51 @@ export function Chat({ channel, messages, onSend }: Props) {
             }}
           />
           <textarea
+            ref={textInput}
             rows={1}
             value={draft}
-            onChange={(e) => setDraft(e.target.value.slice(0, 2000))}
+            onChange={(e) => { setDraft(e.target.value.slice(0, 2000)); e.target.style.height = 'auto'; e.target.style.height = `${Math.min(e.target.scrollHeight, 160)}px`; }}
             onPaste={aoColar}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                 e.preventDefault();
                 send();
               }
             }}
-            placeholder={`Conversar em #${channel?.name ?? ''}`}
-            className="max-h-40 flex-1 resize-none bg-transparent text-[15px] text-bright outline-none placeholder:text-mute"
+            placeholder={connected ? `Conversar em #${channel?.name ?? ''}` : 'Reconectando… sua mensagem fica aqui'}
+            aria-label={`Mensagem em ${channel?.name ?? 'conversa'}`}
+            maxLength={2000}
+            className="min-h-9 min-w-0 flex-1 resize-none bg-transparent py-2 text-sm leading-5 text-bright outline-none placeholder:text-mute"
           />
           <button
             onClick={send}
-            disabled={!draft.trim() && !anexo}
-            className="shrink-0 text-mute transition hover:text-white disabled:opacity-30"
+            disabled={(!draft.trim() && !anexo) || !connected || preparing || !channel}
+            className="primary-button flex h-9 w-9 shrink-0 items-center justify-center rounded-lg disabled:opacity-30"
             title="Enviar"
+            aria-label="Enviar mensagem"
           >
             <Send />
           </button>
         </div>
+        <p className="mt-1.5 hidden text-[10px] text-mute/70 sm:block">Enter envia · Shift + Enter quebra a linha · Cole uma imagem com Ctrl + V</p>
       </div>
 
       {ampliada && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-6"
-          onClick={() => setAmpliada(null)}
+        <dialog
+          ref={imageDialog}
+          aria-label="Imagem ampliada"
+          className="fixed inset-0 m-auto max-h-dvh max-w-[100vw] border-0 bg-transparent p-6 backdrop:bg-black/85"
+          onCancel={() => setAmpliada(null)}
+          onClick={(e) => { if (e.target === e.currentTarget) setAmpliada(null); }}
         >
+          <button autoFocus onClick={() => setAmpliada(null)} className="absolute top-3 right-3 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-ink-900 text-2xl text-white" aria-label="Fechar imagem">×</button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={ampliada}
             alt="imagem ampliada"
-            className="max-h-full max-w-full rounded-lg object-contain"
+            className="max-h-[85dvh] max-w-full rounded-lg object-contain"
           />
-        </div>
+        </dialog>
       )}
     </div>
   );

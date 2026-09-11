@@ -30,7 +30,8 @@ import { ProfileModal } from './ProfileModal';
 import { Chat } from './Chat';
 import { MemberList } from './MemberList';
 import { SettingsModal } from './SettingsModal';
-import { Sidebar } from './Sidebar';
+import { Sidebar, type VoiceControls } from './Sidebar';
+import { CallPanel } from './CallPanel';
 import { MusicPlayer } from './MusicPlayer';
 import { RemoteAudio } from './RemoteAudio';
 import { Stage, type Tile } from './Stage';
@@ -58,16 +59,11 @@ function NameGate({ roomId, onDone }: { roomId: string; onDone: (name: string) =
 
   return (
     <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-ink-900 p-4">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute top-[-20%] left-1/2 h-[560px] w-[560px] -translate-x-1/2 rounded-full opacity-25 blur-[120px]"
-        style={{ background: 'radial-gradient(circle, var(--color-blurple), transparent 70%)' }}
-      />
-      <div className="relative w-full max-w-sm">
+      <div className="pop-in relative w-full max-w-sm">
         <div className="mb-8 text-center">
           <Wordmark />
         </div>
-        <div className="rounded-xl bg-ink-500 p-6 text-center shadow-2xl ring-1 ring-white/5">
+        <div className="rounded-2xl border border-white/8 bg-ink-700 p-7 text-center">
           <h1 className="text-lg font-bold text-white">Entrar na sala {roomId}</h1>
           <p className="mt-1 mb-5 text-sm text-mute">Como você quer aparecer para a galera?</p>
           <input
@@ -82,7 +78,7 @@ function NameGate({ roomId, onDone }: { roomId: string; onDone: (name: string) =
           <button
             onClick={submit}
             disabled={!draft.trim()}
-            className="w-full rounded-lg bg-blurple py-3 font-semibold text-white shadow-lg shadow-blurple/20 transition hover:bg-blurple-dark active:scale-[0.99] disabled:opacity-40 disabled:shadow-none"
+            className="primary-button w-full rounded-lg py-3 text-sm font-semibold"
           >
             Entrar
           </button>
@@ -103,10 +99,34 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
   const [profileOpen, setProfileOpen] = useState(false);
   // abaixo de 1024px a lista de membros some; este botão a traz de volta
   const [listaAberta, setListaAberta] = useState(false);
+  const [channelsOpen, setChannelsOpen] = useState(false);
+  const drawer = useRef<HTMLDivElement>(null);
+  const channelTrigger = useRef<HTMLButtonElement>(null);
   const [player, setPlayer] = useState<PlayerState>(EMPTY_PLAYER);
   /** relógio nosso menos o do servidor, para alinhar a posição da música */
   const [clockOffset, setClockOffset] = useState(0);
   const [musicVolume, setMusicVolume] = useState(60);
+
+  useEffect(() => {
+    if (!channelsOpen && !listaAberta) return;
+    const mobileDrawer = channelsOpen && window.matchMedia('(max-width: 767px)').matches;
+    if (mobileDrawer) drawer.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setChannelsOpen(false);
+        setListaAberta(false);
+        if (mobileDrawer) channelTrigger.current?.focus();
+      }
+      if (event.key !== 'Tab' || !mobileDrawer) return;
+      const controls = drawer.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input, [tabindex="0"]');
+      if (!controls?.length) return;
+      const first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [channelsOpen, listaAberta]);
 
   // -------------------------------------------------------- configurações
   const stored = useStoredSettings();
@@ -306,69 +326,80 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
   const createChannel = (channelName: string, type: 'text' | 'voice') =>
     getSocket().emit('channel:create', { name: channelName, type });
 
+  const voiceControls: VoiceControls = {
+    inVoice: voice.inVoice,
+    voiceChannel: voice.voiceChannel,
+    micOn: voice.micOn,
+    micLive: voice.micLive,
+    deafened: voice.deafened,
+    connecting: voice.connecting,
+    screenStarting: voice.screenStarting,
+    joinVoice: (id) => {
+      playSfx('join');
+      void voice.joinVoice(id);
+    },
+    leaveVoice: () => {
+      playSfx('leave');
+      voice.leaveVoice();
+    },
+    toggleMic: () => {
+      playSfx(voice.micOn ? 'mute' : 'unmute');
+      voice.toggleMic();
+    },
+    toggleDeafen: () => {
+      playSfx(voice.deafened ? 'unmute' : 'mute');
+      voice.toggleDeafen();
+    },
+    startScreen: () => {
+      playSfx('shareStart');
+      void voice.startScreen();
+    },
+    camOn: !!voice.localCam,
+    toggleCam: () => {
+      playSfx(voice.localCam ? 'shareStop' : 'shareStart');
+      voice.toggleCam();
+    },
+    stopScreen: () => {
+      playSfx('shareStop');
+      voice.stopScreen();
+    },
+    isSharing: !!voice.localScreen,
+  };
+
   return (
-    <div className="flex h-dvh overflow-hidden bg-ink-500">
+    <div className="room-shell flex h-dvh overflow-hidden bg-ink-500">
+      {channelsOpen && <button className="fixed inset-0 z-40 bg-black/55 md:hidden" aria-label="Fechar canais" onClick={() => { setChannelsOpen(false); channelTrigger.current?.focus(); }} />}
+      {listaAberta && <button className="fixed inset-0 z-30 bg-black/35 lg:hidden" aria-label="Fechar lista de pessoas" onClick={() => setListaAberta(false)} />}
+      <div ref={drawer} id="channel-navigation" className="sidebar-drawer h-full shrink-0" data-open={channelsOpen}>
       <Sidebar
         roomId={roomId}
+        connected={connected}
+        onClose={() => { setChannelsOpen(false); channelTrigger.current?.focus(); }}
         channels={channels}
         users={users}
         me={me}
         speaking={voice.speaking}
         activeChannel={active}
-        onSelectChannel={setActive}
+        onSelectChannel={(id) => { setActive(id); setChannelsOpen(false); }}
         onCreateChannel={createChannel}
         onOpenSettings={() => setSettingsOpen(true)}
         onOpenProfile={() => setProfileOpen(true)}
         userAudio={userAudio}
         onUserAudioChange={alterarVolumeDe}
-        voice={{
-          inVoice: voice.inVoice,
-          voiceChannel: voice.voiceChannel,
-          micOn: voice.micOn,
-          micLive: voice.micLive,
-          deafened: voice.deafened,
-          connecting: voice.connecting,
-          joinVoice: (id) => {
-            playSfx('join');
-            void voice.joinVoice(id);
-          },
-          leaveVoice: () => {
-            playSfx('leave');
-            voice.leaveVoice();
-          },
-          toggleMic: () => {
-            playSfx(voice.micOn ? 'mute' : 'unmute');
-            voice.toggleMic();
-          },
-          toggleDeafen: () => {
-            playSfx(voice.deafened ? 'unmute' : 'mute');
-            voice.toggleDeafen();
-          },
-          startScreen: () => {
-            playSfx('shareStart');
-            void voice.startScreen();
-          },
-          camOn: !!voice.localCam,
-          toggleCam: () => {
-            playSfx(voice.localCam ? 'shareStop' : 'shareStart');
-            voice.toggleCam();
-          },
-          stopScreen: () => {
-            playSfx('shareStop');
-            voice.stopScreen();
-          },
-          isSharing: !!voice.localScreen,
-        }}
+        voice={voiceControls}
       />
 
-      <main className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-ink-900/60 px-4 shadow-sm">
+      </div>
+
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="flex h-16 shrink-0 items-center gap-2.5 border-b border-white/6 bg-ink-500 px-4 sm:px-6">
+          <button ref={channelTrigger} onClick={() => { setChannelsOpen(true); setListaAberta(false); }} aria-label="Abrir canais" aria-controls="channel-navigation" aria-expanded={channelsOpen} className="mr-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-mute hover:bg-ink-400 md:hidden"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16" /></svg></button>
           {activeChannel?.type === 'voice' ? (
             <Speaker className="h-5 w-5 text-mute" />
           ) : (
             <Hash className="h-5 w-5 text-mute" />
           )}
-          <span className="font-semibold text-white">{activeChannel?.name ?? '...'}</span>
+          <span className="truncate text-sm font-semibold text-white">{activeChannel?.name ?? '...'}</span>
           <span className="ml-3 hidden border-l border-ink-400 pl-3 text-[13px] text-mute sm:block">
             {users.length} {users.length === 1 ? 'pessoa' : 'pessoas'} na sala
           </span>
@@ -378,7 +409,9 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
             </span>
           )}
           <button
-            onClick={() => setListaAberta((v) => !v)}
+            onClick={() => { setListaAberta((v) => !v); setChannelsOpen(false); }}
+            aria-label="Mostrar ou esconder pessoas"
+            aria-expanded={listaAberta}
             title="Mostrar ou esconder a lista de pessoas"
             className={`ml-auto rounded p-1.5 transition hover:bg-ink-400 lg:hidden ${
               listaAberta ? 'text-white' : 'text-mute'
@@ -388,8 +421,10 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
           </button>
         </header>
 
+        <CallPanel voice={voiceControls} users={users} channels={channels} speaking={voice.speaking} connected={connected} onOpenSettings={() => setSettingsOpen(true)} />
+
         {voice.error && (
-          <div className="flex items-center gap-3 border-b border-danger/40 bg-danger/15 px-4 py-2 text-sm text-danger">
+          <div role="alert" className="flex items-center gap-3 border-b border-danger/40 bg-danger/15 px-4 py-2 text-sm text-danger">
             <span className="flex-1">{voice.error}</span>
             <button onClick={voice.clearError} className="shrink-0 text-xs underline">
               ok
@@ -435,9 +470,10 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
           }}
         />
 
-        <Chat channel={activeChannel} messages={messages[active] ?? []} onSend={send} />
+        <Chat key={active} channel={activeChannel} messages={messages[active] ?? []} onSend={send} connected={connected} />
       </main>
 
+      <div className="member-drawer shrink-0" data-open={listaAberta}>
       <MemberList
         users={users}
         me={me}
@@ -447,6 +483,7 @@ function Room({ roomId, name }: { roomId: string; name: string }) {
         botTocando={player.current ? player.current.title : null}
         visivel={listaAberta}
       />
+      </div>
 
       {/* áudio (microfone) dos outros participantes */}
       {Object.entries(voice.remoteStreams).map(([id, streams]) => {

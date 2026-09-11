@@ -1,25 +1,24 @@
 @import 'tailwindcss';
 
 @theme {
-  /* paleta escura no espírito do Discord */
-  --color-ink-900: #1a1b1e;
-  --color-ink-800: #1e1f22;
-  --color-ink-700: #232428;
-  --color-ink-600: #2b2d31;
-  --color-ink-500: #313338;
-  --color-ink-400: #383a40;
-  --color-ink-300: #404249;
-  --color-ink-200: #4e5058;
+  --color-ink-900: #141615;
+  --color-ink-800: #181b19;
+  --color-ink-700: #1d201e;
+  --color-ink-600: #202421;
+  --color-ink-500: #242825;
+  --color-ink-400: #343a35;
+  --color-ink-300: #414943;
+  --color-ink-200: #637067;
 
-  --color-mute: #949ba4;
-  --color-soft: #b5bac1;
-  --color-bright: #dbdee1;
+  --color-mute: #a1aaa3;
+  --color-soft: #c2c9c3;
+  --color-bright: #e6eae5;
 
-  --color-blurple: #5865f2;
-  --color-blurple-dark: #4752c4;
-  --color-online: #23a55a;
-  --color-danger: #da373c;
-  --color-danger-dark: #a12828;
+  --color-blurple: #3d8065;
+  --color-blurple-dark: #316b54;
+  --color-online: #90caaa;
+  --color-danger: #ee8680;
+  --color-danger-dark: #994c48;
 }
 
 html,
@@ -32,6 +31,58 @@ body {
   color: var(--color-bright);
   font-family: 'Segoe UI', ui-sans-serif, system-ui, -apple-system, 'Helvetica Neue', sans-serif;
   overscroll-behavior: none;
+  -webkit-font-smoothing: antialiased;
+  color-scheme: dark;
+}
+
+button, a, input, textarea { -webkit-tap-highlight-color: transparent; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+button, a { transition-property: color, background-color, border-color, opacity, transform; transition-duration: 160ms; }
+button:active:not(:disabled) { transform: translateY(1px); }
+::selection { background: #3d806580; color: #fff; }
+.field { border: 1px solid #ffffff0d; outline: none; transition: border-color 160ms, box-shadow 160ms; }
+.field::placeholder { color: var(--color-mute); opacity: .7; }
+.field:focus { border-color: var(--color-online); box-shadow: 0 0 0 3px #90caaa12; }
+.primary-button { background: var(--color-blurple); color: #fff; }
+.primary-button:hover:not(:disabled) { background: #478e70; }
+.secondary-button { background: var(--color-ink-400); color: var(--color-bright); }
+.secondary-button:hover:not(:disabled) { background: var(--color-ink-300); }
+.primary-button:disabled, .secondary-button:disabled { opacity: .4; }
+.entry-page { display: flex; flex-direction: column; justify-content: center; }
+.entry-brand > div { justify-content: flex-start; }
+.entry-brand img { width: 44px; height: 44px; }
+.entry-brand span { font-size: 20px; }
+.channel-row { min-height: 38px; border: 1px solid transparent; }
+.channel-row[aria-current='page'] { background: #90caaa12; border-color: #90caaa16; color: #d8eddf; }
+.call-control { display: inline-flex; min-height: 38px; align-items: center; justify-content: center; gap: 8px; border: 1px solid #ffffff0a; border-radius: 8px; padding: 8px 12px; background: var(--color-ink-400); color: var(--color-soft); font-size: 12px; font-weight: 600; }
+.call-control:hover { background: var(--color-ink-300); color: #fff; }
+.call-control[aria-pressed='true'] { background: #90caaa17; border-color: #90caaa30; color: var(--color-online); }
+.call-control:disabled { opacity: .45; }
+.call-control.danger { background: #ee868015; border-color: #ee868024; color: var(--color-danger); }
+.call-control.danger:hover { background: #ee86802a; }
+.video-controls { opacity: 1; }
+.video-tile:fullscreen { width: 100vw; max-width: none; border-radius: 0; display: flex; flex-direction: column; justify-content: center; }
+.video-tile:fullscreen .video-footer { position: absolute; left: 16px; right: 16px; bottom: 16px; background: #141615e8; border: 1px solid #ffffff20; border-radius: 10px; }
+.video-tile:fullscreen > video { height: 100vh !important; max-height: 100vh !important; }
+.chat-message { border-radius: 6px; }
+.chat-message:hover { background: #ffffff03; }
+.chat-composer { border: 1px solid #ffffff0d; transition: border-color 160ms, background-color 160ms; }
+.chat-composer:focus-within { border-color: #90caaa55; background: #2a302c; }
+.room-shell > .member-drawer > aside { height: 100%; width: 224px; border-left: 1px solid #ffffff06; }
+@media (max-width: 1023px) {
+  .member-drawer[data-open='true'] { position: fixed; right: 12px; top: 68px; bottom: 14px; z-index: 40; overflow: hidden; border: 1px solid #ffffff18; border-radius: 12px; box-shadow: 0 16px 50px #0008; }
+}
+@media (min-width: 768px) { .entry-content { min-height: 66vh; } }
+@media (max-width: 767px) {
+  /* Na sala, o selo não pode cobrir o campo e o botão de enviar. */
+  body:has(.room-shell) .version-badge { display: none; }
+  .sidebar-drawer { position: fixed; inset: 0 auto 0 0; width: min(290px, 85vw); z-index: 45; transition: transform 200ms ease, visibility 200ms; }
+  .sidebar-drawer[data-open='false'] { visibility: hidden; transform: translateX(-100%); }
+  .sidebar-drawer[data-open='true'] { visibility: visible; transform: translateX(0); }
+  .sidebar-drawer > aside { width: 100%; }
+  .call-control { padding: 8px 10px; }
+  .stage-screens { grid-template-columns: minmax(0, 1fr) !important; }
 }
 
 /* scrollbar estilo Discord */
@@ -62,7 +113,7 @@ body {
 }
 
 .pop-in {
-  animation: pop-in 0.12s ease-out;
+  animation: pop-in 0.2s ease-out;
 }
 
 /* foco visível só para quem navega por teclado */
@@ -117,4 +168,14 @@ input[type='range']:disabled {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/*
+ * Em tela cheia quem vai é o quadro inteiro, para os controles e o nome
+ * continuarem por cima da imagem. O maxHeight que limita o quadro no layout
+ * normal (44vh, 28vh...) é inline, por isso precisa de !important aqui.
+ */
+:fullscreen > video {
+  height: 100vh !important;
+  max-height: 100vh !important;
 }

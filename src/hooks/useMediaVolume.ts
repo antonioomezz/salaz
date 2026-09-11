@@ -9,6 +9,7 @@ type Opts = {
   muted: boolean;
   /** true para a própria mídia: nunca toca, para não realimentar o microfone */
   isLocal?: boolean;
+  outputDeviceId?: string;
 };
 
 /**
@@ -23,7 +24,7 @@ type Opts = {
 export function useMediaVolume(
   ref: RefObject<HTMLMediaElement | null>,
   stream: MediaStream | null,
-  { volume, muted, isLocal = false }: Opts
+  { volume, muted, isLocal = false, outputDeviceId = '' }: Opts
 ) {
   const silenciar = muted || isLocal;
   const amplificar = !silenciar && volume > 100 && !!stream;
@@ -52,7 +53,21 @@ export function useMediaVolume(
       src = ctx.createMediaStreamSource(stream);
       gain = ctx.createGain();
       gain.gain.value = volume / 100;
-      src.connect(gain).connect(ctx.destination);
+      src.connect(gain);
+      let active = true;
+      const routed = ctx as AudioContext & { setSinkId?: (id: string) => Promise<void> };
+      const connect = async () => {
+        try {
+          if (routed.setSinkId) await routed.setSinkId(outputDeviceId);
+          else if (outputDeviceId) throw new Error('Saída alternativa indisponível no amplificador');
+          if (active) gain.connect(ctx.destination);
+        } catch {
+          // Manter o som no dispositivo escolhido, mesmo sem amplificação disponível.
+          if (active) { el.muted = false; el.volume = 1; }
+        }
+      };
+      void connect();
+      return () => { active = false; src.disconnect(); gain.disconnect(); };
     } catch {
       // sem WebAudio disponível, o teto volta a ser 100%
       el.muted = silenciar;
@@ -60,9 +75,5 @@ export function useMediaVolume(
       return;
     }
 
-    return () => {
-      src.disconnect();
-      gain.disconnect();
-    };
-  }, [ref, stream, volume, silenciar, amplificar]);
+  }, [ref, stream, volume, silenciar, amplificar, outputDeviceId]);
 }

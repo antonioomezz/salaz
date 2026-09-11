@@ -32,7 +32,7 @@ export function RemoteAudio({ stream, muted, volume, outputDeviceId }: Props) {
     void el.setSinkId(outputDeviceId).catch(() => {});
   }, [outputDeviceId]);
 
-  useMediaVolume(ref, stream, { volume, muted });
+  useMediaVolume(ref, stream, { volume, muted, outputDeviceId });
 
   return <audio ref={ref} autoPlay playsInline className="hidden" />;
 }

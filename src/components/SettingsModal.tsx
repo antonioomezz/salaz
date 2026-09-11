@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DEFAULT_SETTINGS, type AudioSettings } from '@/lib/audioSettings';
 import { playSfx } from '@/lib/sounds';
 import { Camera, Headphones, Mic, Screen } from './icons';
@@ -28,6 +28,7 @@ export function SettingsModal({
   onPlayFile,
   onStopFile,
 }: Props) {
+  const dialog = useRef<HTMLDivElement>(null);
   const [inputs, setInputs] = useState<MediaDeviceInfo[]>([]);
   const [outputs, setOutputs] = useState<MediaDeviceInfo[]>([]);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
@@ -52,9 +53,18 @@ export function SettingsModal({
   }, []);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const previous = document.activeElement as HTMLElement | null;
+    dialog.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key !== 'Tab') return;
+      const items = [...(dialog.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex="0"]') ?? [])].filter(el => el.getClientRects().length);
+      const first = items[0], last = items[items.length - 1];
+      if (e.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) { e.preventDefault(); last?.focus(); }
+      if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    return () => { window.removeEventListener('keydown', onKey); previous?.focus(); };
   }, [onClose]);
 
   const set = <K extends keyof AudioSettings>(key: K, value: AudioSettings[K]) =>
@@ -68,7 +78,8 @@ export function SettingsModal({
       onClick={onClose}
     >
       <div
-        className="flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-ink-500 shadow-2xl ring-1 ring-white/5"
+        ref={dialog} role="dialog" aria-modal="true" aria-label="Configurações de voz" tabIndex={-1}
+        className="pop-in flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-xl bg-ink-500 shadow-2xl ring-1 ring-white/5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex shrink-0 items-center justify-between border-b border-ink-400 px-6 py-4">
@@ -92,6 +103,7 @@ export function SettingsModal({
           {/* ------------------------------------------------ entrada */}
           <Section icon={<Mic className="h-4 w-4" />} title="Dispositivo de entrada">
             <select
+              aria-label="Microfone"
               value={settings.inputDeviceId}
               onChange={(e) => set('inputDeviceId', e.target.value)}
               className="w-full rounded bg-ink-900 px-3 py-2 text-sm text-bright outline-none"
@@ -158,7 +170,8 @@ export function SettingsModal({
           <Section icon={<Headphones className="h-4 w-4" />} title="Dispositivo de saída">
             {trocarSaida ? (
               <select
-                value={settings.outputDeviceId}
+                aria-label="Saída de áudio"
+              value={settings.outputDeviceId}
                 onChange={(e) => set('outputDeviceId', e.target.value)}
                 className="w-full rounded bg-ink-900 px-3 py-2 text-sm text-bright outline-none"
               >
@@ -252,6 +265,7 @@ export function SettingsModal({
           {/* ------------------------------------------------ câmera */}
           <Section icon={<Camera className="h-4 w-4" />} title="Câmera">
             <select
+              aria-label="Câmera"
               value={settings.videoDeviceId}
               onChange={(e) => set('videoDeviceId', e.target.value)}
               className="w-full rounded bg-ink-900 px-3 py-2 text-sm text-bright outline-none"
@@ -273,8 +287,8 @@ export function SettingsModal({
             <div className="flex gap-2">
               {(
                 [
-                  ['detail', 'Texto e código', '30 fps · mantém a nitidez, perde quadros se faltar banda'],
-                  ['motion', 'Vídeo e jogo', '60 fps · mantém os quadros, baixa a resolução se faltar banda'],
+                  ['detail', 'Texto e código', 'Prioriza a nitidez de letras e detalhes'],
+                  ['motion', 'Vídeo e jogo', 'Prioriza movimento fluido, até 1080p e 60 fps'],
                 ] as const
               ).map(([valor, titulo, desc]) => (
                 <button
@@ -296,8 +310,7 @@ export function SettingsModal({
               <div className="space-y-1">
                 {(
                   [
-                    ['tab', 'Só da aba compartilhada', 'Preciso: nenhum outro som vaza. Compartilhe como aba do Chrome.'],
-                    ['system', 'Do sistema inteiro', 'Para jogos e apps fora do navegador. Captura TUDO, inclusive esta chamada.'],
+                    ['tab', 'Da aba compartilhada', 'Escolha uma aba do Chrome ou Edge e habilite o áudio dela.'],
                     ['none', 'Sem som', 'Transmite só a imagem.'],
                   ] as const
                 ).map(([valor, titulo, desc]) => (
@@ -323,9 +336,8 @@ export function SettingsModal({
                 ))}
               </div>
               <p className="mt-2 text-[10px] leading-tight text-mute">
-                Não existe como capturar o som de uma <b>janela</b> isolada — nenhum navegador
-                faz isso, porque o sistema não expõe áudio por aplicativo. Se precisa levar o
-                som junto, compartilhe uma <b>aba</b>.
+                Janelas e telas inteiras vão sem áudio nesta versão web para evitar repetir a voz dos participantes.
+                {' '}Mudanças na origem do som valem na próxima transmissão.
               </p>
             </div>
 
@@ -346,10 +358,7 @@ export function SettingsModal({
               ))}
             </div>
             <p className="mt-2 text-[11px] leading-tight text-mute">
-              A taxa vale a partir da <b>próxima</b> transmissão — pare e recomece para aplicar.
-              O quadro da sua tela mostra quanto a captura entrega e quanto sai de fato; se a
-              captura ficar em 30, compartilhe uma <b>aba do Chrome</b> em vez da tela inteira,
-              que costuma render bem mais quadros.
+              30 ou 60 fps são aplicados durante a transmissão. A qualidade recebida depende da conexão, do computador e do número de espectadores. O indicador no vídeo mostra o envio real.
             </p>
           </Section>
 
@@ -487,6 +496,7 @@ function Slider({
       </div>
       <input
         type="range"
+        aria-label={label}
         min={0}
         max={max}
         value={value}

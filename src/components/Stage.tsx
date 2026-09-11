@@ -104,8 +104,23 @@ function VideoTile({
   onToggleMute?: () => void;
 }) {
   const video = useRef<HTMLVideoElement>(null);
+  const quadro = useRef<HTMLDivElement>(null);
   const temAudio = tile.stream.getAudioTracks().length > 0;
   const ehCamera = tile.kind === 'cam';
+
+  /*
+   * Tela cheia vai no quadro, e não no <video>: assim os controles e a
+   * etiqueta com o nome continuam por cima da imagem lá dentro.
+   */
+  const alternarTelaCheia = () => {
+    if (document.fullscreenElement) {
+      void document.exitFullscreen().catch(() => {});
+      return;
+    }
+    void quadro.current?.requestFullscreen?.().catch((e) => {
+      console.warn('tela cheia recusada:', e);
+    });
+  };
 
   useEffect(() => {
     const el = video.current;
@@ -120,6 +135,7 @@ function VideoTile({
     volume,
     muted: deafened || tile.userMuted,
     isLocal: tile.isLocal,
+    outputDeviceId,
   });
 
   useEffect(() => {
@@ -132,7 +148,9 @@ function VideoTile({
 
   return (
     <div
-      className={`group relative overflow-hidden rounded-lg bg-black ring-1 ring-ink-400 ${
+      ref={quadro}
+      onDoubleClick={alternarTelaCheia}
+      className={`video-tile group relative overflow-hidden rounded-lg bg-black ring-1 ring-ink-400 ${
         compact ? 'w-56 shrink-0' : ''
       }`}
     >
@@ -181,10 +199,12 @@ function VideoTile({
         </div>
       )}
 
-      <div className="absolute top-1.5 right-1.5 flex gap-1 opacity-0 transition group-hover:opacity-100">
+      <div className="video-controls absolute top-1.5 right-1.5 flex gap-1">
         {!ehCamera && !tile.isLocal && temAudio && onToggleMute && (
           <button
             onClick={onToggleMute}
+            aria-label={tile.userMuted ? 'Ouvir transmissão' : 'Silenciar transmissão'}
+            aria-pressed={!!tile.userMuted}
             title={
               tile.userMuted || volume === 0
                 ? 'Ouvir o som da live'
@@ -200,8 +220,9 @@ function VideoTile({
           </button>
         )}
         <button
-          onClick={() => video.current?.requestFullscreen?.()}
-          title="Tela cheia"
+          onClick={alternarTelaCheia}
+          aria-label="Alternar tela cheia"
+          title="Tela cheia (ou dê dois cliques na imagem)"
           className="rounded bg-black/70 p-1.5 text-white transition hover:bg-black"
         >
           <Expand className="h-4 w-4" />

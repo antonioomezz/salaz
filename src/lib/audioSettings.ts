@@ -38,8 +38,8 @@ export type AudioSettings = {
   /**
    * O que capturar de áudio ao transmitir:
    * - 'tab': só o som da aba escolhida (preciso; nenhum outro som vaza)
-   * - 'system': som do sistema inteiro (necessário para jogos e apps de fora
-   *   do navegador, mas captura TUDO, inclusive a própria chamada)
+   * - 'system': no desktop, som do computador excluindo o Negoneycord.
+   *   No navegador só permitimos som de aba para evitar recapturar a chamada.
    * - 'none': sem áudio
    */
   screenAudio: 'tab' | 'system' | 'none';
@@ -62,7 +62,7 @@ export const DEFAULT_SETTINGS: AudioSettings = {
   noiseGateThreshold: 12,
   sfxEnabled: true,
   sfxVolume: 60,
-  screenPreset: 'detail',
+  screenPreset: 'motion',
   screenFps: 60,
   screenAudio: 'tab',
   musicVolume: 70,
@@ -71,13 +71,20 @@ export const DEFAULT_SETTINGS: AudioSettings = {
 
 const KEY = 'negoneycord:audio';
 
+function normalizeSettings(saved: Partial<AudioSettings>): AudioSettings {
+  const settings = { ...DEFAULT_SETTINGS, ...saved };
+  // Preferência antiga de áudio global: na web usar apenas a aba escolhida.
+  if (settings.screenAudio === 'system') settings.screenAudio = 'tab';
+  return settings;
+}
+
 export function loadSettings(): AudioSettings {
   if (typeof window === 'undefined') return DEFAULT_SETTINGS;
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return DEFAULT_SETTINGS;
     // mescla com o padrão para sobreviver a versões antigas do objeto salvo
-    return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<AudioSettings>) };
+    return normalizeSettings(JSON.parse(raw) as Partial<AudioSettings>);
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -123,7 +130,7 @@ export function useStoredSettings(): AudioSettings | null {
     if (raw === null) return null;
     if (!raw) return DEFAULT_SETTINGS;
     try {
-      return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<AudioSettings>) };
+      return normalizeSettings(JSON.parse(raw) as Partial<AudioSettings>);
     } catch {
       return DEFAULT_SETTINGS;
     }
